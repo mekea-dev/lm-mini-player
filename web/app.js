@@ -6,8 +6,10 @@
  *   pagina -> programa:  ready | drag | size:<borda> | min | close | pin:0/1 | op:0.85
  *                        paste | typing:0/1 | open:<url>
  *                        mod:<player|youtube|spotify> | search:<texto> | modhome
+ *                        update:<link do video atual> | updweb
  *   programa -> pagina:  cfg:pin=1;op=1 | url:<texto> | link | ui:0/1 | dragend
  *                        mod:<modulo> | modtitle:<texto> | modfail:<modulo>
+ *                        upd:ready:<versao> | upd:manual:<versao> | upd:busy | upd:fail
  */
 (function () {
   'use strict';
@@ -15,6 +17,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var body = document.body;
   var HAS_HOST = !!(window.chrome && window.chrome.webview && window.chrome.webview.postMessage);
+  var Room = window.LMRoom;
   var APP_NAME = 'LM Mini Player';
   var OPACITY_STEPS = [1, 0.85, 0.7, 0.55, 0.4];
   // teclas de velocidade (como no Video Speed Controller): pela LETRA da tecla; so em teclados
@@ -76,13 +79,15 @@
     } else if (cmd === 'dragend') {
       S.barHover = false;
       refreshUi();
+    } else if (cmd === 'upd') {
+      onUpdate(arg);
     }
   }
 
   if (HAS_HOST) {
     window.chrome.webview.addEventListener('message', function (e) { onHostMessage(e.data); });
   }
-  window.__lm = { fromHost: onHostMessage, state: S, renderRate: function () { renderRate(); } };   // gancho para testes
+  window.__lm = { fromHost: onHostMessage, state: S, renderRate: function () { renderRate(); }, resumeLink: function () { return resumeLink(); } };   // ganchos para testes
 
   function applyCfg(arg) {
     arg.split(';').forEach(function (kv) {
@@ -170,6 +175,179 @@
     return 1;
   }
 
+  /* ---------- sala: ver o mesmo video junto com outras pessoas ---------- */
+
+  function sendToFrameRaw(obj) {
+    try {
+      var f = S.player && S.player.getIframe && S.player.getIframe();
+      if (f && f.contentWindow) {
+        var m = { lmmp: 1 };
+        for (var k in obj) { if (Object.prototype.hasOwnProperty.call(obj, k)) m[k] = obj[k]; }
+        f.contentWindow.postMessage(m, 'https://www.youtube.com');
+      }
+    } catch (err) { /* ignora */ }
+  }
+
+  function sendRoomToFrame(r) {
+    sendToFrameRaw({ type: 'room', pos: r.pos, at: r.at, playing: r.playing, rate: r.rate, offset: Room.offset() });
+  }
+
+  function roomMsg(text) { $('rpMsg').textContent = text || ''; }
+
+  function roomError(err) {
+    var m = err && err.message;
+    if (m === 'sem_servidor') return 'Salas desligadas: o servidor de salas ainda não foi configurado.';
+    if (m === 'codigo_invalido') return 'Código inválido. Ele tem de 6 a 12 letras e números.';
+    if (m === 'sala_nao_encontrada') return 'Sala não encontrada. Confira o código.';
+    return 'Não foi possível falar com o servidor de salas.';
+  }
+
+  // o que esta tocando agora, para a sala nova ja nascer com o video atual
+  function currentRoomState() {
+    if (!S.current || !S.player) return null;
+    var pos = 0, playing = false;
+    try { pos = S.player.getCurrentTime() || 0; playing = S.player.getPlayerState() === 1; } catch (e) { /* ignora */ }
+    return { vid: S.current.id || null, list: S.current.list || null, pos: pos, playing: playing, rate: S.rate || 1 };
+  }
+
+  function openRoomPanel() {
+    clearError();
+    $('roomPanel').hidden = false;
+    renderRoom();
+    roomMsg('');
+    if (!Room.code()) setTimeout(function () { $('rpCode').focus(); }, 30);
+  }
+
+  function closeRoomPanel() { $('roomPanel').hidden = true; focusPlayer(); }
+
+  // desenha o botao da barra e o painel conforme a sala (e esconde tudo se o servidor de salas nao esta configurado)
+  function renderRoom() {
+    var avail = Room.available();
+    $('bRoom').hidden = !avail;
+    $('roomHome').hidden = !avail;
+    var code = Room.code();
+    var on = !!code;
+    var b = $('bRoom');
+    var n = Room.members();
+    b.classList.toggle('room-on', on);
+    b.title = on
+      ? 'Sala ' + code + ': ' + n + (n === 1 ? ' pessoa' : ' pessoas') + ' (clique para ver)'
+      : 'Sala: ver o mesmo vídeo junto com outras pessoas';
+    $('rpOut').hidden = on;
+    $('rpIn').hidden = !on;
+    if (on) {
+      $('rpCodeShow').textContent = code;
+      $('rpInfo').textContent = (Room.status() === 'reconectando' ? 'Reconectando… ' : '') +
+        n + (n === 1 ? ' pessoa na sala' : ' pessoas na sala');
+    }
+    sendToFrameRaw({ type: 'roomOn', on: on });
+  }
+
+  function copyText(t) {
+    function done() { roomMsg('Código copiado.'); }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { /* ignora */ }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fallback);
+    else fallback();
+  }
+
+  // o estado da sala chegou: mesmo video -> manda o player ficar igual; outro video -> carrega o da sala
+  Room.hooks.changed = renderRoom;
+  Room.hooks.toast = function (m) { toast(m); };
+  Room.hooks.applyRemote = function (r) {
+    var same = S.current && S.current.id === (r.vid || null) && (S.current.list || null) === (r.list || null);
+    if (same) { sendRoomToFrame(r); return; }
+    var info = window.LMLink.parse(r.vid
+      ? 'https://youtu.be/' + r.vid + (r.list ? '?list=' + r.list : '')
+      : 'https://www.youtube.com/playlist?list=' + r.list);
+    if (!info) return;
+    info.start = Math.max(0, Math.floor(r.target));
+    S.remoteLoad = true;                                             // veio da sala: nao devolve para a sala
+    try { play(info); } finally { S.remoteLoad = false; }
+  };
+
+  setInterval(function () {                                          // o relogio do servidor muda devagar
+    if (Room.code()) sendToFrameRaw({ type: 'roomclock', offset: Room.offset() });
+  }, 8000);
+
+  $('roomHome').addEventListener('click', openRoomPanel);
+  $('rpClose').addEventListener('click', closeRoomPanel);
+  $('rpCreate').addEventListener('click', function () {
+    roomMsg('Criando a sala…');
+    Room.create(currentRoomState()).then(function () {
+      roomMsg('Sala criada. Passe o código para a outra pessoa.');
+      renderRoom();
+    }, function (err) { roomMsg(roomError(err)); });
+  });
+  $('rpJoinForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    roomMsg('Entrando…');
+    Room.join($('rpCode').value).then(function () {
+      roomMsg('');
+      renderRoom();
+      toast('Você entrou na sala ' + Room.code());
+      closeRoomPanel();
+    }, function (err) { roomMsg(roomError(err)); });
+  });
+  $('rpLeave').addEventListener('click', function () { Room.leave(); renderRoom(); roomMsg('Você saiu da sala.'); });
+  $('rpCopy').addEventListener('click', function () { copyText(Room.code()); });
+  $('rpCode').addEventListener('focus', function () { S.typing = true; toHost('typing:1'); refreshUi(); });
+  $('rpCode').addEventListener('blur', function () { S.typing = false; toHost('typing:0'); refreshUi(); });
+
+  /* ---------- atualizacao automatica ---------- */
+
+  // o programa avisa que ha versao nova (ja baixada = "ready"; sem como instalar sozinho = "manual")
+  var Upd = { kind: '', ver: '', hidden: false };
+
+  function renderUpdate() {
+    var show = !!Upd.kind && !Upd.hidden;
+    $('upd').hidden = !show;
+    if (!show) return;
+    $('updVer').textContent = Upd.ver;
+    var b = $('updGo');
+    b.disabled = Upd.kind === 'busy';
+    b.textContent = Upd.kind === 'busy' ? 'Atualizando…' : (Upd.kind === 'manual' ? 'Baixar' : 'Atualizar');
+  }
+
+  function onUpdate(arg) {
+    var p = arg.split(':');
+    if (p[0] === 'ready' || p[0] === 'manual') {
+      if (Upd.ver !== (p[1] || '')) Upd.hidden = false;          // outra versao: avisa de novo
+      Upd.kind = p[0];
+      Upd.ver = p[1] || '';
+    } else if (p[0] === 'busy') {
+      Upd.kind = 'busy';
+      Upd.hidden = false;
+    } else if (p[0] === 'fail') {
+      Upd.kind = 'manual';                                         // sobra baixar no site
+      Upd.hidden = false;
+      toast('Não foi possível atualizar agora. Você pode baixar a versão nova no site.');
+    }
+    renderUpdate();
+  }
+
+  // link do que esta tocando (com o minuto): a janela nova volta ao mesmo video
+  function resumeLink() {
+    var c = S.current;
+    if (!c || (!c.id && !c.list)) return '';
+    var t = 0;
+    try { t = Math.floor((S.player && S.player.getCurrentTime && S.player.getCurrentTime()) || 0); } catch (e) { /* ignora */ }
+    if (c.id) return 'https://youtu.be/' + c.id + '?t=' + t + (c.list ? '&list=' + c.list : '');
+    return 'https://www.youtube.com/playlist?list=' + c.list;
+  }
+
+  $('updGo').addEventListener('click', function () {
+    if (Upd.kind === 'manual') toHost('updweb');
+    else if (Upd.kind === 'ready') toHost('update:' + resumeLink());
+  });
+  $('updX').addEventListener('click', function () { Upd.hidden = true; renderUpdate(); focusPlayer(); });
+
   /* ---------- tela de link ---------- */
 
   function openHome() {
@@ -255,6 +433,7 @@
 
   function play(info) {
     S.current = info;
+    if (!S.remoteLoad && Room.code()) Room.publishLoad(info);        // numa sala, trocar de video troca para todos
     clearError();
     if (S.mode !== 'player') { setMode('player'); toHost('mod:player'); }   // tocou um link: sai da busca
     $('url').value = '';
@@ -323,6 +502,11 @@
     updateTitleFromPlayer();
     focusPlayer();
     sendToFrame('hello');
+    if (Room.code()) {                                                // video novo numa sala: poe igual ao da sala
+      sendToFrameRaw({ type: 'roomOn', on: true });
+      var rs = Room.state();
+      if (rs) sendRoomToFrame(rs);
+    }
   }
 
   function onPlayerState(e) {
@@ -406,7 +590,7 @@
   $('bMin').addEventListener('click', function () { toHost('min'); });
   $('bClose').addEventListener('click', function () { toHost('close'); });
   $('bLink').addEventListener('click', openHome);
-  $('bPaste').addEventListener('click', pasteFromClipboard);
+  $('bRoom').addEventListener('click', openRoomPanel);
   $('bPin').addEventListener('click', function () {
     S.pin = !S.pin;
     renderPin();
@@ -469,13 +653,14 @@
   // teclado e area de transferencia (quando o foco esta nesta pagina; com o foco dentro do video quem trata e o programa)
   document.addEventListener('keydown', function (e) {
     var k = (e.key || '').toLowerCase();
+    if (k === 'escape' && !$('roomPanel').hidden) { closeRoomPanel(); return; }
     if (k === 'escape' && S.current && body.classList.contains('home')) { closeHome(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'l') { e.preventDefault(); openOmnibox(); return; }
 
     // velocidade e saltos (D, S, R, X, Z): com o foco dentro do video o proprio script do player trata;
     // com o foco nesta pagina (por exemplo depois de clicar na barra) a pagina repassa o comando
     var cmd = speedCmdFor(e);
-    if (cmd && S.current && S.mode === 'player' && !S.typing && !e.ctrlKey && !e.altKey && !e.metaKey && !body.classList.contains('home')) {
+    if (cmd && S.current && S.mode === 'player' && $('roomPanel').hidden && !S.typing && !e.ctrlKey && !e.altKey && !e.metaKey && !body.classList.contains('home')) {
       e.preventDefault();
       if (cmd === 'reset' && e.repeat) return;
       if (e.shiftKey && (cmd === 'faster' || cmd === 'slower')) cmd += 'Big';
@@ -483,7 +668,7 @@
     }
   });
   document.addEventListener('paste', function (e) {
-    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput')) return;   // os campos cuidam do proprio colar
+    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput' || e.target.id === 'rpCode')) return;   // os campos cuidam do proprio colar
     var t = e.clipboardData ? e.clipboardData.getData('text') : '';
     if (t) { e.preventDefault(); handleText(t); }
   });
@@ -491,10 +676,10 @@
   // o script que vive dentro do player do YouTube (speed-frame.js) informa a velocidade atual
   window.addEventListener('message', function (e) {
     var d = e.data;
-    if (!d || d.lmmp !== 1 || d.type !== 'rate') return;
+    if (!d || d.lmmp !== 1) return;
     if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(e.origin)) return;
-    S.rate = +d.rate || 1;
-    renderRate();
+    if (d.type === 'rate') { S.rate = +d.rate || 1; renderRate(); }
+    else if (d.type === 'rev') { Room.onFrameEvent(d); }               // a pessoa tocou/pausou/pulou: sobe para a sala
   });
 
   // arrastar um link de outro lugar e soltar na tela de link
@@ -524,6 +709,7 @@
 
   renderPin();
   renderOpacity();
+  renderRoom();
   refreshUi();
   toHost('ready');
 })();

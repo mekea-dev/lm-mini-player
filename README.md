@@ -20,6 +20,14 @@ Pronto. O programa é "portátil": a pasta pode ficar em qualquer lugar. Para te
 
 **Requisitos:** Windows 10 ou 11 (64 bits), com o *WebView2 Runtime* da Microsoft. Ele já vem no Windows 11 e na maioria dos Windows 10 atualizados; se faltar, o programa avisa e abre a página de download. Testado no Windows 11.
 
+### Atualização automática
+
+A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir, o programa confere no GitHub se há uma versão nova; se houver, baixa, confere o arquivo (SHA-256) e mostra um aviso verde **"Nova versão X · Atualizar"** junto com a barra de cima. Um clique e ele se atualiza, reabre e volta ao mesmo vídeo e minuto. Se você ignorar o aviso, a versão nova é instalada sozinha na próxima vez que abrir o programa. Se algo der errado (a versão nova não abrir, por exemplo), tudo volta ao que era.
+
+- Se a pasta do programa não permitir gravar (por exemplo, dentro de *Arquivos de Programas*), o aviso vira **"Baixar"** e abre a página da versão.
+- Para desligar: abra `%LOCALAPPDATA%\LMMiniPlayer\config.ini` e ponha `update=0`.
+- Quem está na 1.2.0 ou antes precisa baixar a 1.3.0 uma vez, como acima.
+
 ## Como usar
 
 | Quero... | Faça |
@@ -41,7 +49,7 @@ Pronto. O programa é "portátil": a pasta pode ficar em qualquer lugar. Para te
 ![Tocando](docs/tocando.png)
 
 - Aceita `youtube.com/watch?v=…`, `youtu.be/…`, `/shorts/…`, `/live/…`, `/embed/…`, playlists (`list=…`) e tempo inicial (`t=1m30s`). Pode colar o link no meio de um texto: o programa acha sozinho.
-- Também dá para abrir direto de um atalho ou do terminal: `LMMiniPlayer.exe "https://youtu.be/…"`.
+- Também dá para abrir direto de um atalho ou do terminal: `LMMiniPlayer.exe "https://youtu.be/…"` (com `--minimized` ele abre minimizado).
 - Posição, tamanho, transparência e "sempre por cima" são lembrados para a próxima vez.
 - Abrir o programa de novo cria **outra janela** (dá para assistir a dois vídeos).
 - O **Spotify** é o player web do próprio Spotify dentro do programa. Funciona com conta gratuita (com anúncios) ou Premium. O programa não vê nem guarda a sua senha. Se o Spotify recusar o login por Google ou Facebook dentro do programa, entre com e-mail e senha.
@@ -59,10 +67,11 @@ Pronto. O programa é "portátil": a pasta pode ficar em qualquer lugar. Para te
 
 ## Privacidade
 
-- Nenhuma conta, nenhum cadastro, nenhuma telemetria. O programa só conversa com o YouTube (player oficial e pesquisa) e, se você abrir o módulo, com o Spotify.
+- Nenhuma conta, nenhum cadastro, nenhuma telemetria. O programa só conversa com o YouTube (player oficial e pesquisa), com o Spotify se você abrir o módulo e com o GitHub para ver se há versão nova.
+- **Verificação de versão:** ao abrir (e a cada 6 horas) o programa faz um pedido comum a `api.github.com` pelo último release, e baixa o `.zip` de `github.com/mekea-dev/lm-mini-player` se houver versão nova. O GitHub enxerga o seu endereço IP e o nome do programa, como em qualquer download; o programa não envia mais nada. Dá para desligar (`update=0`, veja acima).
 - Se você entrar na sua conta do YouTube ou do Spotify dentro do programa, o login fica no perfil local do programa (veja abaixo), como num navegador. O programa não guarda senhas.
 - Ao abrir **sem** link, ele olha a área de transferência uma vez para ver se há um link do YouTube. Nada é guardado nem enviado.
-- Os dados locais ficam em `%LOCALAPPDATA%\LMMiniPlayer`: `config.ini` (posição e tamanho), `erro.log` (só se algo der errado) e a pasta `WebView2` (cookies e preferências do YouTube, como o volume). Para voltar ao estado de fábrica, feche o programa e apague essa pasta.
+- Os dados locais ficam em `%LOCALAPPDATA%\LMMiniPlayer`: `config.ini` (posição, tamanho e a opção de atualização), `erro.log` (só se algo der errado), a pasta `update` (a versão nova enquanto espera para ser instalada) e a pasta `WebView2` (cookies e preferências do YouTube, como o volume). Para voltar ao estado de fábrica, feche o programa e apague essa pasta.
 
 ## Problemas comuns
 
@@ -79,11 +88,16 @@ O player oficial do YouTube só aceita de 0,25× a 2×. Para ir de 0,07× a 16×
 
 A pesquisa do YouTube e o Spotify são **módulos**: cada um abre o site correspondente numa segunda janela do WebView2, criada só quando você usa, que fica por baixo da barra do programa. Na pesquisa, um script (`web/yt-browse.js`) captura o clique num vídeo e manda o link para o seu player em vez de deixar o site tocar. O Spotify é o player web dele (o WebView2 tem a DRM Widevine que ele exige).
 
+A **atualização automática** (`src/Updater.cs`) lê o último release pela API do GitHub, baixa o `.zip`, confere o SHA-256 que o GitHub informa, descompacta numa pasta de espera e, na hora de instalar, copia os arquivos novos ao lado dos antigos, renomeia os antigos para `.old` (o Windows deixa renomear um programa em execução) e abre a versão nova. Ela precisa dar sinal de vida em 20 s; se não der, é fechada e tudo volta ao que era. Em pasta de desenvolvimento (com `build.ps1` ou `.git` ao lado do `.exe`) a atualização fica desligada, para nunca trocar arquivos por cima do código-fonte.
+
+As **salas** (`web/room.js`, `relay/`) usam um pequeno servidor (Cloudflare Worker + D1) que guarda só o estado de cada sala; veja `relay/LEIA-ME.md`.
+
 ```
 lm-mini-player/
-├─ src/        Program.cs (a janela), manifesto e ícone
-├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), speed-frame.js (velocidade dentro do player) e yt-browse.js (cliques da pesquisa)
-├─ tests/      links.html: testes do leitor de links
+├─ src/        Program.cs (a janela), Updater.cs (atualização automática), manifesto e ícone
+├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), room.js (salas), speed-frame.js (velocidade e salas dentro do player) e yt-browse.js (cliques da pesquisa)
+├─ relay/      o servidor de salas (worker.js, schema.sql) e o guia para montá-lo
+├─ tests/      links.html (leitor de links), worker-test.html (servidor de salas) e servidores falsos para testes
 ├─ docs/       imagens deste README
 ├─ build.ps1   compila (e empacota com -Package)
 ├─ CHANGELOG.md  o que mudou em cada versão (vira as notas do release)
@@ -99,9 +113,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1            # gera LMMiniPla
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Package   # e também o .zip em dist\
 ```
 
-**Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` em `src/Program.cs`, acrescente a seção da versão no `CHANGELOG.md`, faça o commit e envie uma tag (`git tag -a v1.1.1 -m "..." && git push origin v1.1.1`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o histórico da versão e o SHA-256 nas notas.
+**Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` e `AssemblyFileVersion` em `src/Program.cs` (os três têm de bater com a tag: a atualização automática recusa um pacote cuja versão interna não é a anunciada, e o workflow confere isso antes de compilar), acrescente a seção da versão no `CHANGELOG.md`, faça o commit e envie uma tag (`git tag -a v1.3.1 -m "..." && git push origin v1.3.1`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o histórico da versão e o SHA-256 nas notas.
 
-**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título).
+**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** veja o fim de `relay/LEIA-ME.md`.
 
 ## Créditos e avisos
 

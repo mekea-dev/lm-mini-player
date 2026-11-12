@@ -16,6 +16,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # a atualizacao automatica recusa um pacote cuja versao interna nao e a da tag: melhor falhar aqui
+      - name: Conferir que a versao do codigo e a da tag sao a mesma
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          asm=$(sed -n 's/.*AssemblyVersion("\([0-9.]*\)").*/\1/p' src/Program.cs | head -n 1)
+          file=$(sed -n 's/.*AssemblyFileVersion("\([0-9.]*\)").*/\1/p' src/Program.cs | head -n 1)
+          ps=$(sed -n "s/^\$version *= *'\([0-9.]*\)'.*/\1/p" build.ps1 | head -n 1)
+          echo "tag=$tag AssemblyVersion=$asm AssemblyFileVersion=$file build.ps1=$ps"
+          if [ "$asm" != "$tag.0" ] || [ "$file" != "$tag.0" ] || [ "$ps" != "$tag" ]; then
+            echo "::error::A versao do codigo nao bate com a tag $GITHUB_REF_NAME. Corrija build.ps1 e src/Program.cs."
+            exit 1
+          fi
+
       - name: Compilar e empacotar
         shell: powershell
         run: ./build.ps1 -Package

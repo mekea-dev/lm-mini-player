@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace LMMiniPlayer
 {
@@ -40,6 +40,11 @@ namespace LMMiniPlayer
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { AppLog.Error(e.Exception); };
             AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs e) { AppLog.Error(e.ExceptionObject as Exception); };
+
+            // atualizacao automatica: este processo foi aberto por uma atualizacao? Avisa o antigo e segue.
+            args = Updater.OnStartup(args);
+            // ha versao nova ja baixada e este e o unico programa aberto? Troca os arquivos, abre a nova e encerra aqui.
+            if (Updater.TryApplyAtStart(args, Settings.Load())) return;
 
             Application.Run(new MainForm(args));
         }
@@ -65,10 +70,13 @@ namespace LMMiniPlayer
     static class AppPaths
     {
         // %LOCALAPPDATA%\LMMiniPlayer: configuracao e dados do WebView2 (cookies, volume do YouTube...)
+        // (LMMP_DATA_DIR troca a pasta: usado nos testes para nao mexer nos dados de quem usa o programa)
         public static string DataDir
         {
             get
             {
+                string over = Environment.GetEnvironmentVariable("LMMP_DATA_DIR");
+                if (!string.IsNullOrEmpty(over)) return over;
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "LMMiniPlayer");
@@ -88,7 +96,7 @@ namespace LMMiniPlayer
         [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     }
 
-    // posicao, tamanho, "sempre por cima" e transparencia, gravados em config.ini
+    // posicao, tamanho, "sempre por cima", transparencia e atualizacao automatica, gravados em config.ini
     sealed class Settings
     {
         public int X = int.MinValue;
@@ -97,6 +105,7 @@ namespace LMMiniPlayer
         public int H = 0;
         public bool Pin = true;
         public double Opacity = 1.0;
+        public bool AutoUpdate = true;                    // "update=0" no config.ini desliga a verificacao de versao nova
 
         public bool HasBounds { get { return X != int.MinValue && Y != int.MinValue; } }
 
@@ -123,6 +132,7 @@ namespace LMMiniPlayer
                         case "w": if (int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out n)) s.W = n; break;
                         case "h": if (int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out n)) s.H = n; break;
                         case "pin": s.Pin = v != "0"; break;
+                        case "update": s.AutoUpdate = v != "0"; break;
                         case "opacity":
                             if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out d))
                                 s.Opacity = Math.Max(0.25, Math.Min(1.0, d));
@@ -146,7 +156,8 @@ namespace LMMiniPlayer
                     "w=" + W.ToString(CultureInfo.InvariantCulture),
                     "h=" + H.ToString(CultureInfo.InvariantCulture),
                     "pin=" + (Pin ? "1" : "0"),
-                    "opacity=" + Opacity.ToString("0.##", CultureInfo.InvariantCulture)
+                    "opacity=" + Opacity.ToString("0.##", CultureInfo.InvariantCulture),
+                    "update=" + (AutoUpdate ? "1" : "0")
                 };
                 File.WriteAllText(FilePath, string.Join("\r\n", lines) + "\r\n");
             }
@@ -205,10 +216,31 @@ namespace LMMiniPlayer
         string webDir;
         int modSeq;                                                    // descarta pedidos de modulo que chegam atrasados
 
+        // atualizacao automatica (a logica fica em Updater.cs)
+        const int UpdateEveryMs = 6 * 60 * 60 * 1000;                  // olha o GitHub de novo a cada 6 horas
+        static readonly Regex ResumeLink = new Regex(@"^https://(youtu\.be/[A-Za-z0-9_-]{11}(\?[A-Za-z0-9_=&.-]{0,200})?|www\.youtube\.com/playlist\?list=[A-Za-z0-9_-]{10,80})$");
+        readonly Timer updateTimer = new Timer();
+        bool updateStarted;
+        bool updateBusy;                                               // verificando, baixando ou instalando
+        bool updateReady;                                              // versao nova ja baixada, pronta para instalar
+        Version updateVersion;                                         // versao nova que o GitHub anunciou (null = nenhuma)
+        string updatePage;                                             // pagina do release (botao "Baixar")
+        readonly bool startMinimized;                                  // aberto com --minimized
+
         public MainForm(string[] args)
         {
             cfg = Settings.Load();
             pinned = cfg.Pin;
+
+            List<string> rest = new List<string>();
+            if (args != null)
+            {
+                foreach (string a in args)
+                {
+                    if (a == "--minimized") startMinimized = true; else rest.Add(a);
+                }
+            }
+            args = rest.ToArray();
 
             Text = "LM Mini Player";
             FormBorderStyle = FormBorderStyle.None;
@@ -221,6 +253,7 @@ namespace LMMiniPlayer
             Bounds = InitialBounds(scale);
             TopMost = pinned;
             Opacity = cfg.Opacity;
+            if (startMinimized) WindowState = FormWindowState.Minimized;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
             startText = StartLink(args);
@@ -372,12 +405,20 @@ namespace LMMiniPlayer
             cfg.Save();
         }
 
+        // area onde a pagina aparece (minimizada, vale o tamanho de antes de minimizar)
+        Size ViewSize()
+        {
+            return WindowState == FormWindowState.Minimized ? RestoreBounds.Size : ClientSize;
+        }
+
         void FitController()
         {
-            if (controller == null || WindowState == FormWindowState.Minimized) return;
+            if (controller == null) return;
+            Size view = ViewSize();
+            if (view.Width <= 0 || view.Height <= 0) return;
             try
             {
-                controller.Bounds = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
+                controller.Bounds = new Rectangle(0, 0, view.Width, view.Height);
                 controller.IsVisible = true;
                 if (activeModule != null && activeModule.Controller != null)
                 {
@@ -491,6 +532,7 @@ namespace LMMiniPlayer
                     if (startText != null) Send("url:" + startText);
                     lastMove = Environment.TickCount;
                     hoverTimer.Start();
+                    StartUpdateChecks();
                     break;
                 case "drag": BeginGesture("move"); break;
                 case "size": BeginGesture(arg); break;
@@ -521,6 +563,8 @@ namespace LMMiniPlayer
                         try { activeModule.Core.Navigate(activeModule.HomeUrl); } catch { }
                     }
                     break;
+                case "update": ApplyUpdateNow(arg); break;                 // "Atualizar": troca os arquivos e abre a versao nova
+                case "updweb": OpenExternal(updatePage); break;            // "Baixar": abre a pagina do release no navegador
             }
         }
 
@@ -557,7 +601,8 @@ namespace LMMiniPlayer
             float s = CurrentScale();
             int edge = (int)Math.Round(BrowseEdgeDip * s);
             int top = (int)Math.Round(BrowseBarDip * s);
-            return new Rectangle(edge, top, Math.Max(1, ClientSize.Width - 2 * edge), Math.Max(1, ClientSize.Height - top - edge));
+            Size view = ViewSize();
+            return new Rectangle(edge, top, Math.Max(1, view.Width - 2 * edge), Math.Max(1, view.Height - top - edge));
         }
 
         async void RunModule(string name, string url)
@@ -840,6 +885,104 @@ namespace LMMiniPlayer
                 return Native.GetAncestor(h, 2) == Handle;                  // GA_ROOT
             }
             catch { return true; }
+        }
+
+        // ---------- atualizacao automatica ----------
+
+        // depois que a pagina abre: confere se ha versao nova (agora e de tempos em tempos)
+        void StartUpdateChecks()
+        {
+            if (updateStarted) { SendUpdateState(); return; }       // a pagina recarregou: mostra o aviso de novo
+            updateStarted = true;
+
+            // limpa o que uma troca anterior deixou (os arquivos antigos so podem sair depois que o processo velho fechar)
+            bool justUpdated = Updater.JustUpdated;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                for (int i = 0; i < (justUpdated ? 12 : 1); i++)
+                {
+                    System.Threading.Thread.Sleep(5000);
+                    if (Updater.Cleanup()) break;
+                }
+            });
+
+            if (!Updater.Enabled(cfg)) return;
+            Timer first = new Timer();
+            first.Interval = 4000;                                  // deixa o video e a tela subirem antes
+            first.Tick += delegate { first.Stop(); first.Dispose(); RunUpdateCheck(); };
+            first.Start();
+            updateTimer.Interval = UpdateEveryMs;
+            updateTimer.Tick += delegate { RunUpdateCheck(); };
+            updateTimer.Start();
+        }
+
+        void SendUpdateState()
+        {
+            if (updateVersion == null) return;
+            Send("upd:" + (updateReady ? "ready:" : "manual:") + updateVersion.ToString(3));
+        }
+
+        async void RunUpdateCheck()
+        {
+            if (!Updater.Enabled(cfg) || updateBusy || updateReady) return;
+            updateBusy = true;
+            try
+            {
+                // uma versao baixada numa vez anterior ja esta esperando?
+                StagedUpdate staged = Updater.FindStaged();
+                if (staged != null) { updateVersion = staged.Version; updateReady = true; SendUpdateState(); }
+
+                UpdateInfo info = await Task.Run(() => Updater.CheckLatest());
+                if (info == null) return;
+                updatePage = info.PageUrl;
+                if (staged != null && staged.Version >= info.Version) return;
+
+                // sem como instalar sozinho (pasta sem permissao, release sem SHA-256): avisa e deixa baixar no site
+                if (!info.CanInstall || !Updater.CanWrite())
+                {
+                    updateVersion = info.Version;
+                    updateReady = false;
+                    SendUpdateState();
+                    return;
+                }
+
+                staged = await Task.Run(() => Updater.Stage(info));
+                updateVersion = staged.Version;
+                updateReady = true;
+                SendUpdateState();
+            }
+            catch (System.Net.WebException) { /* sem internet ou GitHub fora do ar: tenta na proxima vez */ }
+            catch (Exception ex) { AppLog.Error(ex); }
+            finally { updateBusy = false; }
+        }
+
+        // o usuario clicou em "Atualizar": troca os arquivos, abre a versao nova (no mesmo video) e fecha esta janela
+        async void ApplyUpdateNow(string link)
+        {
+            if (updateBusy || !updateReady) return;
+            StagedUpdate st = Updater.FindStaged();
+            if (st == null) { updateReady = false; Send("upd:fail"); return; }
+
+            updateBusy = true;
+            Send("upd:busy");
+            bool ok = false;
+            try
+            {
+                SaveSettings();                                     // a janela nova abre no mesmo lugar e tamanho
+                List<string> extra = new List<string>();
+                if (startMinimized) extra.Add("--minimized");
+                if (!string.IsNullOrEmpty(link) && link.Length <= 300 && ResumeLink.IsMatch(link)) extra.Add(link);   // volta ao mesmo video
+                string extraArgs = Updater.JoinArgs(extra.ToArray());
+                ok = await Task.Run(() => Updater.ApplyAndRelaunch(st, extraArgs));
+            }
+            catch (Exception ex) { AppLog.Error(ex); }
+
+            if (ok) { Close(); return; }
+
+            updateBusy = false;
+            updateReady = false;
+            Updater.MarkFailed(st);
+            Send("upd:fail");
         }
 
         // ---------- utilidades ----------

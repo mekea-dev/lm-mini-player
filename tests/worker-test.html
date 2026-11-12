@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Teste do servidor de salas…</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; background: #111; color: #eee; padding: 1rem 1.5rem; }
+  code { background: #222; padding: .1em .4em; border-radius: 4px; }
+  .ok { color: #5ee0a0; } .bad { color: #ff6a5e; }
+  li { margin: .15rem 0; }
+</style>
+</head>
+<body>
+<h1>Teste do servidor de salas (<code>relay/worker.js</code>)</h1>
+<p>Roda o código <b>real</b> do Worker contra um SQLite de verdade. Antes, em dois terminais, na pasta do projeto:<br>
+<code>python tests/d1-shim.py 8802</code> (o "D1 falso") e <code>python -m http.server 8000</code>; depois abra
+<code>http://localhost:8000/tests/worker-test.html</code>. Cada abertura precisa de um <code>d1-shim.py</code> novo (as salas ficam na memória dele).</p>
+<h2 id="resumo">rodando…</h2>
+<ul id="lista"></ul>
+<script>
+(async function () {
+  var SHIM = 'http://127.0.0.1:8802';
+  var resumo = document.getElementById('resumo');
+  var lista = document.getElementById('lista');
+  try {
+    var workerSrc = await (await fetch('../relay/worker.js')).text();
+    var testSrc = await (await fetch('worker-test.js')).text();
+    // o Worker e um modulo ("export default"); aqui vira uma funcao que devolve o objeto
+    var W = (new Function(workerSrc.replace('export default {', 'return {')))();
+    var AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    var rep = JSON.parse(await new AsyncFunction('W', 'SHIM', testSrc)(W, SHIM));
+    rep.results.forEach(function (r) {
+      var li = document.createElement('li');
+      li.className = r.ok ? 'ok' : 'bad';
+      li.textContent = (r.ok ? 'OK  ' : 'FALHOU  ') + r.name + (r.ok ? '' : '  ->  ' + JSON.stringify(r.extra));
+      lista.appendChild(li);
+    });
+    var total = rep.passed + rep.failed;
+    resumo.textContent = (rep.failed ? 'FALHOU ' : 'OK ') + rep.passed + '/' + total;
+    resumo.className = rep.failed ? 'bad' : 'ok';
+    document.title = resumo.textContent;
+  } catch (e) {
+    resumo.textContent = 'ERRO: ' + e.message + ' (o d1-shim.py esta rodando na porta 8802?)';
+    resumo.className = 'bad';
+    document.title = 'ERRO';
+  }
+})();
+</script>
+</body>
+</html>

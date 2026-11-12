@@ -43,6 +43,9 @@
     osdTimer: 0
   };
 
+  // sala: o programa manda o estado da sala; aqui o <video> e posto igual e os gestos da pessoa sobem
+  var room = { on: false, state: null, offset: 0, ignoreUntil: 0, lastFix: 0, pending: false, seekTimer: 0 };
+
   function round2(n) { return Math.round(n * 100) / 100; }
   function clamp(n) { return Math.min(MAX, Math.max(MIN, round2(n))); }
   function label(n) { return String(round2(n)) + '×'; }
@@ -104,10 +107,11 @@
 
   function setRate(v, r, silent) {
     st.desired = clamp(r);
-    saveStored();
+    if (!room.on) saveStored();                        // numa sala a velocidade e da sala: nao mexe na sua preferida
     if (v && !isAd()) applyToVideo(v, st.desired);     // em anuncio so guarda; vale depois dele
     report();
     if (!silent) showOsd(label(st.desired));
+    emit('rate');
   }
 
   function resetRate(v) {
@@ -173,8 +177,9 @@
     }
     // mudanca vinda de outro lugar (menu do YouTube, teclas < e >): adota como a nova velocidade
     st.desired = clamp(cur);
-    saveStored();
+    if (!room.on) saveStored();
     report();
+    emit('rate');
   }, true);
 
   // video novo (ou o video depois do anuncio): aplica a velocidade escolhida
@@ -183,6 +188,7 @@
     if (!v || v.tagName !== 'VIDEO') return;
     st.loadAt = Date.now();
     applyDesired(v);
+    if (room.on && room.state) applyRoom(room.state);
     report();
   }
   document.addEventListener('loadstart', onNewMedia, true);
@@ -193,9 +199,82 @@
   setInterval(function () {
     var ad = isAd();
     if (ad) st.adUntil = Date.now() + AD_GRACE_MS;
-    if (wasAd && !ad) applyDesired(video());
+    if (wasAd && !ad) {
+      applyDesired(video());
+      if (room.on && room.state) applyRoom(room.state);
+    }
     wasAd = ad;
   }, 500);
+
+  // ---- salas ----
+  // posicao em que o video deveria estar agora, pela hora do servidor
+  function expected() {
+    var s = room.state;
+    if (!s) return 0;
+    return s.pos + (s.playing ? Math.max(0, (Date.now() + room.offset - s.at) / 1000) * s.rate : 0);
+  }
+
+  function isVideoEvent(e) { return e && e.target && e.target.tagName === 'VIDEO'; }
+
+  // avisa a pagina do que a PESSOA fez (nao do que a sala mandou fazer)
+  function emit(ev) {
+    if (!room.on || isAd() || Date.now() < room.ignoreUntil) return;
+    var v = video();
+    if (!v) return;
+    try { window.parent.postMessage({ lmmp: 1, type: 'rev', ev: ev, pos: v.currentTime, rate: v.playbackRate }, '*'); } catch (e) { /* ignora */ }
+  }
+
+  document.addEventListener('play', function (e) { if (isVideoEvent(e)) emit('play'); }, true);
+  document.addEventListener('pause', function (e) { if (isVideoEvent(e) && !e.target.ended) emit('pause'); }, true);
+  document.addEventListener('seeked', function (e) {
+    if (!isVideoEvent(e)) return;
+    clearTimeout(room.seekTimer);
+    room.seekTimer = setTimeout(function () { emit('seek'); }, 300);   // arrastar a barra gera varios pulos: manda o ultimo
+  }, true);
+
+  function applyRoom(s) {
+    room.state = s;
+    var v = video();
+    if (!room.on || !v || isAd()) { room.pending = true; return; }
+    room.pending = false;
+    var exp = expected();
+    room.ignoreUntil = Date.now() + 2500;                              // o que fizermos agora nao e "gesto da pessoa"
+    if (Math.abs(v.currentTime - exp) > 0.7) { try { v.currentTime = exp; } catch (e) { /* ignora */ } }
+    st.desired = clamp(s.rate);
+    applyToVideo(v, st.desired);
+    report();
+    if (s.playing && v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () { /* autoplay barrado */ }); }
+    if (!s.playing && !v.paused) v.pause();
+  }
+
+  function applyRoomMsg(d) {
+    if (+d.offset || d.offset === 0) room.offset = +d.offset;
+    applyRoom({ pos: +d.pos || 0, at: +d.at || 0, playing: !!d.playing, rate: +d.rate > 0 ? +d.rate : 1 });
+  }
+
+  function setRoomOn(on) {
+    room.on = on;
+    if (!on) {                                                         // saiu da sala: volta a sua velocidade preferida
+      room.state = null;
+      room.pending = false;
+      loadStored();
+      var v = video();
+      if (v) applyDesired(v);
+      report();
+    }
+  }
+
+  // se a pessoa se atrasa ou adianta (carregamento, anuncio, rede), o video e trazido de volta para a sala
+  setInterval(function () {
+    if (!room.on || !room.state || !room.state.playing) return;
+    var v = video();
+    if (!v || v.paused || isAd()) return;
+    if (Math.abs(expected() - v.currentTime) > 1.5 && Date.now() - room.lastFix > 6000) {
+      room.lastFix = Date.now();
+      room.ignoreUntil = Date.now() + 2500;
+      try { v.currentTime = expected(); } catch (e) { /* ignora */ }
+    }
+  }, 2000);
 
   // ---- conversa com a pagina do mini player ----
   window.addEventListener('message', function (e) {
@@ -204,6 +283,9 @@
     if (!d || d.lmmp !== 1) return;
     if (d.type === 'hello') report();
     else if (d.type === 'cmd') runCmd(String(d.cmd));
+    else if (d.type === 'roomOn') setRoomOn(!!d.on);
+    else if (d.type === 'room') applyRoomMsg(d);
+    else if (d.type === 'roomclock') room.offset = +d.offset || 0;
   });
 
   loadStored();

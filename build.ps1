@@ -20,7 +20,7 @@ $lib     = Join-Path $root 'lib'
 $exe     = Join-Path $root 'LMMiniPlayer.exe'
 $csc     = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $wv2     = '1.0.4314.35'     # versao do pacote Microsoft.Web.WebView2
-$version = '1.2.0'           # versao do programa (igual a AssemblyVersion em src\Program.cs)
+$version = '1.3.0'           # versao do programa (igual a AssemblyVersion em src\Program.cs)
 
 if (-not (Test-Path $csc)) { throw "Nao achei o compilador C# em $csc (precisa do .NET Framework 4)." }
 
@@ -77,8 +77,10 @@ $cscArgs = @(
     "/reference:$coreDll",
     '/reference:System.Windows.Forms.dll',
     '/reference:System.Drawing.dll',
-    (Join-Path $src 'Program.cs')
+    '/reference:System.IO.Compression.dll',        # atualizacao automatica: le o .zip
+    '/reference:System.Web.Extensions.dll'         # atualizacao automatica: le o JSON do GitHub
 )
+$cscArgs += @(Get-ChildItem (Join-Path $src '*.cs') | Sort-Object Name | ForEach-Object { $_.FullName })
 & $csc @cscArgs
 if ($LASTEXITCODE -ne 0) { throw 'A compilacao falhou.' }
 

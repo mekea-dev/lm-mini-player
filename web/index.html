@@ -54,6 +54,12 @@
     <symbol id="i-retry" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></g>
     </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></g>
+    </symbol>
     <symbol id="i-alert" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></g>
     </symbol>
@@ -68,6 +74,9 @@
     </symbol>
     <symbol id="i-home" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></g>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></g>
     </symbol>
   </defs>
 </svg>
@@ -89,6 +98,7 @@
       <button type="button" class="btn ghost" id="pasteHome" title="Colar o link copiado"><svg class="i"><use href="#i-clip"/></svg><span>Colar link</span></button>
       <button type="button" class="btn ghost" id="modYoutube" title="Explorar o YouTube aqui dentro"><svg class="i"><use href="#i-search"/></svg><span>Explorar YouTube</span></button>
       <button type="button" class="btn ghost" id="modSpotify" title="Abrir o Spotify aqui dentro"><svg class="i"><use href="#i-music"/></svg><span>Spotify</span></button>
+      <button type="button" class="btn ghost" id="roomHome" title="Ver o mesmo vídeo junto com outras pessoas"><svg class="i"><use href="#i-users"/></svg><span>Sala</span></button>
     </div>
     <p class="tip">Dica: copie um link e aperte <kbd>Ctrl</kbd> + <kbd>V</kbd>. Ele toca na hora.</p>
     <p class="tip tip2">Arraste pela barra de cima · redimensione por qualquer borda</p>
@@ -117,7 +127,7 @@
   </div>
   <button type="button" class="chip" id="bSpeed" hidden title="Velocidade do vídeo: D acelera, S desacelera, R volta a 1× (ou clique aqui)" aria-label="Velocidade do vídeo">1×</button>
   <button type="button" class="ib" id="bLink" title="Pesquisar ou colar link (Ctrl+L)" aria-label="Pesquisar ou colar link"><svg class="i"><use href="#i-search"/></svg></button>
-  <button type="button" class="ib" id="bPaste" title="Colar link e reproduzir (Ctrl+V)" aria-label="Colar link e reproduzir"><svg class="i"><use href="#i-clip"/></svg></button>
+  <button type="button" class="ib" id="bRoom" title="Sala: ver o mesmo vídeo junto com outras pessoas" aria-label="Sala"><svg class="i"><use href="#i-users"/></svg></button>
   <button type="button" class="ib" id="bOp"    title="Transparência da janela" aria-label="Transparência da janela"><svg class="i"><use href="#i-opacity"/></svg></button>
   <button type="button" class="ib on" id="bPin" title="Sempre por cima das outras janelas" aria-label="Sempre por cima" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg></button>
   <button type="button" class="ib" id="bMin"   title="Minimizar" aria-label="Minimizar"><svg class="i"><use href="#i-min"/></svg></button>
@@ -153,7 +163,42 @@
 <i class="rz sw" data-d="sw"></i>
 <i class="rz se" data-d="se"></i>
 
+<!-- Painel da sala (codigo para ver o mesmo video junto com outras pessoas) -->
+<section id="roomPanel" class="roompanel" hidden aria-label="Sala">
+  <div class="rp-card">
+    <button type="button" class="ib rp-x" id="rpClose" title="Fechar" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+    <h2>Sala</h2>
+    <div id="rpOut">
+      <p class="rp-txt">Todo mundo na sala vê o mesmo vídeo ao mesmo tempo: quem põe, pausa ou pula, muda para todos. Cada pessoa toca o seu próprio vídeo (não é transmissão de tela).</p>
+      <button type="button" class="btn primary" id="rpCreate">Criar sala</button>
+      <form id="rpJoinForm" class="field" autocomplete="off">
+        <input id="rpCode" type="text" spellcheck="false" autocapitalize="characters" maxlength="14" placeholder="Código da sala" aria-label="Código da sala">
+        <button type="submit" class="btn">Entrar</button>
+      </form>
+    </div>
+    <div id="rpIn" hidden>
+      <div class="rp-code" id="rpCodeShow" title="Código da sala">--------</div>
+      <p class="rp-txt" id="rpInfo">1 pessoa na sala</p>
+      <div class="rp-row">
+        <button type="button" class="btn" id="rpCopy"><svg class="i"><use href="#i-copy"/></svg><span>Copiar código</span></button>
+        <button type="button" class="btn ghost" id="rpLeave">Sair da sala</button>
+      </div>
+    </div>
+    <p class="rp-msg" id="rpMsg" role="status"></p>
+  </div>
+</section>
+
+<!-- Aviso de versao nova (atualizacao automatica): aparece junto com a barra de cima -->
+<div id="upd" class="upd" hidden role="status">
+  <svg class="i"><use href="#i-download"/></svg>
+  <span class="upd-t">Nova versão <b id="updVer"></b></span>
+  <button type="button" class="upd-b" id="updGo">Atualizar</button>
+  <button type="button" class="upd-x" id="updX" title="Depois" aria-label="Depois"><svg class="i"><use href="#i-x"/></svg></button>
+</div>
+
+<script src="config.js"></script>
 <script src="link.js"></script>
+<script src="room.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

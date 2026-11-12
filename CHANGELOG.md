@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## v1.3.0 - 2026-11-12
+
+- **Atualização automática.** Ao abrir, o programa confere no GitHub se há uma versão nova. Se houver, baixa o arquivo, confere o SHA-256 que o próprio GitHub informa e mostra um aviso verde **"Nova versão X · Atualizar"** junto com a barra de cima. Um clique troca os arquivos, abre a versão nova e volta ao mesmo vídeo e minuto. Se você não clicar, a atualização é instalada sozinha na próxima vez que abrir o programa. Se a versão nova não abrir, tudo volta ao que era. Pasta sem permissão de escrita: o aviso vira **"Baixar"** e abre a página da versão. Para desligar, ponha `update=0` no `config.ini`. **Quem está na 1.2.0 ou antes precisa baixar esta versão uma vez; daí em diante é automático.**
+- **Salas para assistir junto (em preparação).** O código das salas já está no programa: com um código de 8 letras, todo mundo vê o mesmo vídeo ao mesmo tempo (quem põe, pausa, pula, muda a velocidade ou troca de vídeo, muda para todos; cada pessoa toca o seu próprio vídeo). O botão **Sala** só aparece quando há um servidor de salas configurado, e a versão pública ainda não tem um. O passo a passo para montar o servidor (grátis, no Cloudflare) está em `relay/LEIA-ME.md`.
+- O painel da sala se adapta a janelas bem pequenas (sem barra de rolagem feia).
+- Opção `--minimized` na linha de comando: abre o programa minimizado.
+
 ## v1.2.0 - 2026-11-12
 
 - **Pesquisa do YouTube dentro do programa.** A tela de pesquisa (**Ctrl+L** ou o botão da lupa) aceita texto: digite o que procura e os resultados do YouTube aparecem numa janela por baixo da barra do programa. Ao clicar num vídeo, ele toca no seu player (com a velocidade livre e os atalhos), e a pesquisa fica guardada para você voltar a ela. Link colado no campo continua tocando direto. O botão do campo muda sozinho entre "Reproduzir" e "Buscar".

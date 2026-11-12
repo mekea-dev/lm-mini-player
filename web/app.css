@@ -18,6 +18,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 /* a escala do texto acompanha a janela: 11px (janela minuscula) ate 18px (janela grande) */
 html { font-size: clamp(11px, min(3vw, 5.2vh), 18px); }
@@ -366,6 +367,115 @@ body.mod-spotify .modtitle { display: block; }
 body.browse #modLoading { display: flex; }
 body.browse #toast { top: 7px; z-index: 40; }
 
+/* ---------- sala (ver o mesmo video junto com outras pessoas) ---------- */
+.ib.room-on { color: #5ee0a0; }
+.roompanel {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--bar-h) + 4px) .8rem .8rem;
+  background: rgba(7, 7, 10, .9);
+  overflow: auto;
+  scrollbar-width: none;
+}
+.roompanel::-webkit-scrollbar { display: none; }
+.roompanel[hidden] { display: none; }
+.rp-card { position: relative; width: min(26rem, 100%); margin: auto; text-align: center; }
+.rp-card h2 { margin: 0 0 .5rem; font-size: 1.15rem; }
+.rp-x { position: absolute; top: -.2rem; right: -.2rem; }
+.rp-txt { margin: 0 0 .8rem; font-size: .88rem; line-height: 1.35; color: var(--muted); }
+.rp-card .field { margin-top: .6rem; }
+.rp-card .btn { height: 2.4rem; font-size: .95rem; }
+.rp-row { display: flex; gap: .4rem; justify-content: center; flex-wrap: wrap; }
+.rp-code {
+  margin: 0 auto .5rem;
+  width: fit-content;
+  padding: .35rem 1rem;
+  font: 700 1.7rem/1.2 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: .12em;
+  color: #fff;
+  background: var(--panel);
+  border: 1px solid var(--line-hi);
+  border-radius: .6rem;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.rp-msg { min-height: 1.2em; margin: .7rem 0 0; font-size: .85rem; color: var(--accent-hi); }
+body.browse .roompanel { display: none; }
+@media (max-height: 230px) { .rp-txt { display: none; } .rp-code { font-size: 1.2rem; } }
+@media (max-height: 170px) {
+  .roompanel { padding: calc(var(--bar-h) + 2px) .6rem .4rem; }
+  .rp-card h2 { display: none; }
+  .rp-code { font-size: 1rem; padding: .2rem .7rem; margin-bottom: .3rem; }
+  .rp-card .btn { height: 2rem; font-size: .85rem; }
+  .rp-card .field { margin-top: .35rem; }
+  .rp-msg { margin-top: .35rem; font-size: .78rem; }
+}
+
+/* ---------- aviso de versao nova (atualizacao automatica) ---------- */
+/* Fica logo abaixo da barra de cima e aparece junto com ela (quando o mouse mexe sobre a janela). */
+.upd {
+  position: absolute;
+  z-index: 19;
+  left: 8px;
+  top: calc(var(--bar-h) + 10px);
+  max-width: calc(100% - 16px);
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 3px 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #d6f5e6;
+  background: rgba(10, 22, 17, .96);
+  border: 1px solid rgba(94, 224, 160, .55);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+}
+body.ui .upd, .upd:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+body.browse .upd, #roomPanel:not([hidden]) ~ .upd { display: none !important; }
+.upd .i { width: 15px; height: 15px; color: #5ee0a0; }
+.upd-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.upd-t b { font-weight: 700; color: #fff; }
+.upd-b {
+  flex: none;
+  height: 22px;
+  padding: 0 10px;
+  font: 700 12px/1 var(--font);
+  color: #08140e;
+  background: #5ee0a0;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.upd-b:hover { filter: brightness(1.1); }
+.upd-b:disabled { opacity: .6; cursor: default; }
+.upd-x {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #9fb7ab;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.upd-x:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.upd-x .i { width: 13px; height: 13px; color: inherit; }
+.upd-b:focus-visible, .upd-x:focus-visible { outline: 2px solid #8fb3ff; outline-offset: 2px; }
+@media (max-width: 330px) { .upd-t { display: none; } .upd { padding-left: 8px; } }
+
 /* ---------- aviso rapido ---------- */
 #toast {
   position: absolute;
@@ -412,7 +522,7 @@ body.browse #toast { top: 7px; z-index: 40; }
   #bOp, #bLink { display: none; }
 }
 @media (max-width: 300px) {
-  .ttl, #bPaste { display: none; }
+  .ttl, #bRoom { display: none; }
 }
 @media (max-width: 260px) {
   #bSpeed { display: none; }
@@ -424,7 +534,7 @@ body.browse #toast { top: 7px; z-index: 40; }
 @media (max-width: 540px) { body.playing:not(.home):not(.err) #bLink  { display: none; } }
 @media (max-width: 499px) { body.playing:not(.home):not(.err) .ttl     { display: none; } }
 @media (max-width: 470px) { body.playing:not(.home):not(.err) #bOp     { display: none; } }
-@media (max-width: 430px) { body.playing:not(.home):not(.err) #bPaste  { display: none; } }
+@media (max-width: 430px) { body.playing:not(.home):not(.err) #bRoom   { display: none; } }
 @media (max-width: 400px) { body.playing:not(.home):not(.err) #bPin    { display: none; } }
 @media (max-width: 365px) { body.playing:not(.home):not(.err) #bSpeed  { display: none; } }
 /* tela inicial: os botoes de baixo ficam so com icone quando a janela e estreita */
