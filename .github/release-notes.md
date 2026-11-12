@@ -2,6 +2,10 @@
 
 Mini player de YouTube que fica **por cima de tudo**. Cole o link, mova e redimensione como quiser.
 
+### O que mudou
+
+{{CHANGES}}
+
 ### Como usar
 
 1. Baixe o arquivo **`.zip`** (em *Assets*, logo abaixo).

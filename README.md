@@ -26,8 +26,11 @@ Pronto. O programa é "portátil": a pasta pode ficar em qualquer lugar. Para te
 |---|---|
 | Tocar um vídeo | Copie o link e abra o programa (se já houver um link do YouTube copiado, ele toca direto). Ou, com a janela em foco, aperte **Ctrl+V** |
 | Trocar de vídeo | **Ctrl+V** de novo, o botão de colar da barra, ou **Ctrl+L** para digitar o link |
-| Mover | Arraste pela **barra de cima** (ela aparece quando o mouse mexe sobre a janela) |
+| Mover | Arraste pela **barra** no canto de cima (ela aparece quando o mouse mexe sobre a janela; arrasta de qualquer ponto dela, menos dos botões) |
 | Redimensionar | Arraste **qualquer borda ou canto** (tamanho mínimo 240 × 135) |
+| Mudar a velocidade | **D** acelera e **S** desacelera (0,1× por toque; com **Shift**, 1×). **R** volta a 1× e, apertando de novo, à velocidade anterior. Vai de **0,07× a 16×** e fica lembrada. O selo na barra mostra o valor (clique nele para voltar a 1×) |
+| Voltar / avançar 10 s | **Z** / **X** |
+| Legendas, mudo, qualidade | Os botões do próprio YouTube, no **canto superior direito** (a barra do programa fica à esquerda para não cobri-los). Com o foco no vídeo, **C** liga e desliga as legendas |
 | Ver através da janela | Botão de **transparência** (100% → 85% → 70% → 55% → 40%) |
 | Deixar de ficar por cima | Botão de **alfinete** (vem ligado) |
 | Tela cheia | Botão de tela cheia do próprio YouTube; **Esc** volta ao tamanho de antes |
@@ -39,7 +42,7 @@ Pronto. O programa é "portátil": a pasta pode ficar em qualquer lugar. Para te
 - Também dá para abrir direto de um atalho ou do terminal: `LMMiniPlayer.exe "https://youtu.be/…"`.
 - Posição, tamanho, transparência e "sempre por cima" são lembrados para a próxima vez.
 - Abrir o programa de novo cria **outra janela** (dá para assistir a dois vídeos).
-- O **Ctrl+V vale quando a janela do mini player está em foco** (clique nela uma vez). Não é um atalho global.
+- O **Ctrl+V e as teclas de velocidade valem quando a janela do mini player está em foco** (clique nela uma vez). Não são atalhos globais.
 
 ## O que ele não faz
 
@@ -66,13 +69,16 @@ Pronto. O programa é "portátil": a pasta pode ficar em qualquer lugar. Para te
 
 A janela é um programa nativo em C# (WinForms), sem borda e com a propriedade *sempre por cima* do Windows. O conteúdo (a tela de link, a barra e o vídeo) é uma página HTML local, exibida pelo **WebView2** (o motor do Edge que já vem no Windows), com o **player oficial do YouTube** (*IFrame Player API*). Por isso a interface é responsiva de verdade: o layout reage ao tamanho da janela com CSS, e o programa só cuida do que uma página não consegue (ficar por cima, mover/redimensionar sem borda, transparência, tela cheia, lembrar a posição, Ctrl+V com o foco dentro do vídeo).
 
+O player oficial do YouTube só aceita de 0,25× a 2×. Para ir de 0,07× a 16× (como o *Video Speed Controller*), o programa injeta um pequeno script, `web/speed-frame.js`, dentro do player; ele mexe direto no `<video>` e só age no player incorporado do YouTube.
+
 ```
 lm-mini-player/
 ├─ src/        Program.cs (a janela), manifesto e ícone
-├─ web/        a interface: index.html, app.css, app.js e link.js (leitor de links)
+├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links) e speed-frame.js (velocidade dentro do player)
 ├─ tests/      links.html: testes do leitor de links
 ├─ docs/       imagens deste README
 ├─ build.ps1   compila (e empacota com -Package)
+├─ CHANGELOG.md  o que mudou em cada versão (vira as notas do release)
 └─ LICENSE
 ```
 
@@ -85,7 +91,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1            # gera LMMiniPla
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Package   # e também o .zip em dist\
 ```
 
-**Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` em `src/Program.cs`, faça o commit e envie uma tag (`git tag -a v1.0.1 -m "..." && git push origin v1.0.1`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o SHA-256 nas notas.
+**Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` em `src/Program.cs`, acrescente a seção da versão no `CHANGELOG.md`, faça o commit e envie uma tag (`git tag -a v1.1.1 -m "..." && git push origin v1.1.1`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o histórico da versão e o SHA-256 nas notas.
 
 **Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título).
 

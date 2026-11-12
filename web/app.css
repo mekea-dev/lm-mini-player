@@ -178,31 +178,50 @@ body.err #err { display: flex; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
 
 /* ---------- barra de cima ---------- */
+/* Durante o video ela e uma "pilula" no canto esquerdo e deixa o canto direito livre para os
+   botoes do proprio YouTube (legendas, engrenagem). Nas telas de link e de erro vira uma barra
+   de ponta a ponta, porque nao ha botoes do YouTube por baixo. */
 .bar {
   position: absolute;
   z-index: 20;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--bar-h);
+  top: 8px;
+  left: 8px;
+  height: 32px;
+  max-width: calc(100% - 184px);        /* sobra espaco a direita para mudo + legendas + engrenagem do YouTube */
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 0 4px 0 2px;
-  background: linear-gradient(180deg, rgba(8, 8, 12, .99), rgba(8, 8, 12, .95));
-  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  background: rgba(12, 12, 18, .95);
+  border: 1px solid var(--line-hi);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
   opacity: 0;
   transform: translateY(-6px);
   pointer-events: none;
   transition: opacity .15s ease, transform .15s ease;
 }
 body.ui .bar, .bar:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+body.empty .bar, body.home .bar, body.err .bar {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--bar-h);
+  max-width: none;
+  background: linear-gradient(180deg, rgba(8, 8, 12, .99), rgba(8, 8, 12, .95));
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
 
-.drag { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; }
+.drag { flex: 1; min-width: 52px; height: 100%; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; }
 .grip { width: 16px; height: 16px; color: #6d6d7e; }
 .ttl {
   flex: 1;
   min-width: 0;
+  max-width: 240px;
   font-size: 12px;
   font-weight: 500;
   color: #c7c7d4;
@@ -228,6 +247,22 @@ body.ui .bar, .bar:focus-within { opacity: 1; transform: none; pointer-events: a
 .ib:hover { background: rgba(255, 255, 255, .13); color: #fff; }
 .ib.on { color: var(--accent-hi); }
 .ib.danger:hover { background: #e5484d; color: #fff; }
+
+/* selo com a velocidade (so aparece quando nao e 1x) */
+.chip {
+  flex: none;
+  height: 22px;
+  margin: 0 2px;
+  padding: 0 9px;
+  font: 700 12px/1 var(--font);
+  color: #fff;
+  background: rgba(255, 74, 67, .24);
+  border: 1px solid rgba(255, 106, 94, .6);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:hover { background: rgba(255, 74, 67, .42); }
+.chip[hidden] { display: none; }
 
 /* ---------- aviso rapido ---------- */
 #toast {
@@ -271,12 +306,27 @@ body.ui .bar, .bar:focus-within { opacity: 1; transform: none; pointer-events: a
   .field .btn { width: 100%; }
   .tip2 { display: none; }
 }
-@media (max-width: 420px) {
+@media (max-width: 380px) {
   #bOp, #bLink { display: none; }
 }
-@media (max-width: 290px) {
-  .ttl, .grip, #bPaste { display: none; }
+@media (max-width: 300px) {
+  .ttl, #bPaste { display: none; }
 }
+@media (max-width: 260px) {
+  #bSpeed { display: none; }
+}
+
+/* Durante o video a pilula tem de deixar livres os botoes do YouTube (mudo, legendas, engrenagem:
+   os 3 ultimos botoes de 48px do topo, em qualquer tamanho de janela). Quanto mais estreita a janela,
+   menos botoes ela mostra; Ctrl+V e Ctrl+L continuam valendo. */
+@media (max-width: 540px) { body.playing:not(.home):not(.err) #bLink  { display: none; } }
+@media (max-width: 499px) { body.playing:not(.home):not(.err) .ttl     { display: none; } }
+@media (max-width: 470px) { body.playing:not(.home):not(.err) #bOp     { display: none; } }
+@media (max-width: 430px) { body.playing:not(.home):not(.err) #bPaste  { display: none; } }
+@media (max-width: 400px) { body.playing:not(.home):not(.err) #bPin    { display: none; } }
+@media (max-width: 365px) { body.playing:not(.home):not(.err) #bSpeed  { display: none; } }
+/* janelas muito estreitas: o YouTube mostra so 2 botoes (96px), entao da para a barra ocupar um pouco mais */
+@media (max-width: 314px) { .bar { max-width: calc(100% - 112px); } }
 @media (max-height: 340px) {
   .tip2 { display: none; }
   .logo { width: 2.6rem; height: 2.6rem; margin-bottom: .5rem; }

@@ -27,5 +27,9 @@ jobs:
         run: |
           zip=$(ls dist/LM-Mini-Player-*-win-x64.zip | head -n 1)
           sha=$(sha256sum "$zip" | cut -d' ' -f1 | tr 'a-f' 'A-F')
-          sed -e "s/{{VERSION}}/${GITHUB_REF_NAME}/g" -e "s/{{SHA256}}/${sha}/g" .github/release-notes.md > notes.md
+          # "O que mudou": a secao desta versao no CHANGELOG.md
+          CHANGES="$(awk -v tag="$GITHUB_REF_NAME" '$0 ~ "^## " tag "( |$)" { f=1; next } /^## / { f=0 } f' CHANGELOG.md)"
+          export CHANGES
+          sed -e "s/{{VERSION}}/${GITHUB_REF_NAME}/g" -e "s/{{SHA256}}/${sha}/g" .github/release-notes.md \
+            | awk '{ line = $0; sub(/\r$/, "", line); if (line == "{{CHANGES}}") print ENVIRON["CHANGES"]; else print }' > notes.md
           gh release create "$GITHUB_REF_NAME" "$zip" --title "LM Mini Player ${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag

@@ -15,6 +15,14 @@
   var HAS_HOST = !!(window.chrome && window.chrome.webview && window.chrome.webview.postMessage);
   var APP_NAME = 'LM Mini Player';
   var OPACITY_STEPS = [1, 0.85, 0.7, 0.55, 0.4];
+  // teclas de velocidade (como no Video Speed Controller): pela LETRA da tecla; so em teclados
+  // nao latinos vale a posicao fisica (code)
+  var SPEED_BY_CHAR = { d: 'faster', s: 'slower', r: 'reset', x: 'forward', z: 'back' };
+  var SPEED_BY_CODE = { KeyD: 'faster', KeyS: 'slower', KeyR: 'reset', KeyX: 'forward', KeyZ: 'back' };
+  function speedCmdFor(e) {
+    var ch = (e.key && e.key.length === 1) ? e.key.toLowerCase() : '';
+    return /^[a-z]$/.test(ch) ? SPEED_BY_CHAR[ch] : SPEED_BY_CODE[e.code];
+  }
   var TEST_MUTE = /[?&]mute=1\b/.test(location.search);   // so para testes automaticos
 
   var S = {
@@ -28,6 +36,7 @@
     typing: false,
     pin: true,
     opacity: 1,
+    rate: 1,            // velocidade do video (vem do player por mensagem)
     toastTimer: 0,
     muteOnReady: false  // so para testes automaticos (abre o video mudo)
   };
@@ -63,7 +72,7 @@
   if (HAS_HOST) {
     window.chrome.webview.addEventListener('message', function (e) { onHostMessage(e.data); });
   }
-  window.__lm = { fromHost: onHostMessage, state: S };   // gancho para testes
+  window.__lm = { fromHost: onHostMessage, state: S, renderRate: function () { renderRate(); } };   // gancho para testes
 
   function applyCfg(arg) {
     arg.split(';').forEach(function (kv) {
@@ -81,6 +90,7 @@
   function refreshUi() {
     var always = body.classList.contains('empty') || body.classList.contains('home') || body.classList.contains('err');
     body.classList.toggle('ui', always || S.hostActive || S.barHover || S.typing);
+    renderRate();
   }
 
   function toast(msg) {
@@ -109,6 +119,33 @@
 
   function renderOpacity() {
     $('bOp').title = 'Transparência: ' + Math.round(S.opacity * 100) + '% (clique para alternar)';
+  }
+
+  // selo da velocidade na barra: so aparece quando ha video e a velocidade nao e 1x
+  function renderRate() {
+    var b = $('bSpeed');
+    var on = Math.abs(S.rate - 1) > 0.001 && S.current &&
+      !body.classList.contains('empty') && !body.classList.contains('err');
+    b.hidden = !on;
+    b.textContent = (Math.round(S.rate * 100) / 100) + '×';
+  }
+
+  // manda um comando (faster, slower, reset...) para o script que vive dentro do player do YouTube
+  function sendToFrame(cmd) {
+    try {
+      var f = S.player && S.player.getIframe && S.player.getIframe();
+      if (f && f.contentWindow) {
+        f.contentWindow.postMessage({ lmmp: 1, type: cmd === 'hello' ? 'hello' : 'cmd', cmd: cmd }, 'https://www.youtube.com');
+      }
+    } catch (err) { /* ignora */ }
+  }
+
+  // devolve o foco ao video: assim as teclas (D, S, R, X, Z e as do proprio YouTube) valem de novo
+  function focusPlayer() {
+    try {
+      var f = S.player && S.player.getIframe && S.player.getIframe();
+      if (f && !body.classList.contains('home')) f.focus();
+    } catch (err) { /* ignora */ }
   }
 
   function nextOpacity() {
@@ -219,6 +256,8 @@
       e.target.playVideo();
     } catch (err) { /* ignora */ }
     updateTitleFromPlayer();
+    focusPlayer();
+    sendToFrame('hello');
   }
 
   function onPlayerState(e) {
@@ -275,18 +314,13 @@
   /* ---------- eventos ---------- */
 
   // arrastar a janela pela barra (ou por um espaco vazio das telas de link e erro)
-  function startDrag(e) {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    toHost('drag');
-  }
   function startDragOnBackground(e) {
     if (e.button !== 0) return;
     if (e.target.closest('input, button, a, textarea, select')) return;
     e.preventDefault();
     toHost('drag');
   }
-  $('drag').addEventListener('mousedown', startDrag);
+  $('bar').addEventListener('mousedown', startDragOnBackground);   // a barra toda arrasta, menos os botoes
   $('home').addEventListener('mousedown', startDragOnBackground);
   $('err').addEventListener('mousedown', startDragOnBackground);
 
@@ -313,12 +347,18 @@
     renderPin();
     toHost('pin:' + (S.pin ? 1 : 0));
     toast(S.pin ? 'Sempre por cima: ligado' : 'Sempre por cima: desligado');
+    focusPlayer();
   });
   $('bOp').addEventListener('click', function () {
     S.opacity = nextOpacity();
     renderOpacity();
     toHost('op:' + S.opacity);
     toast('Transparência: ' + Math.round(S.opacity * 100) + '%');
+    focusPlayer();
+  });
+  $('bSpeed').addEventListener('click', function () {
+    sendToFrame('reset');
+    focusPlayer();
   });
 
   // tela de link
@@ -342,12 +382,31 @@
   document.addEventListener('keydown', function (e) {
     var k = (e.key || '').toLowerCase();
     if (k === 'escape' && S.current && body.classList.contains('home')) { closeHome(); return; }
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'l') { e.preventDefault(); openHome(); }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'l') { e.preventDefault(); openHome(); return; }
+
+    // velocidade e saltos (D, S, R, X, Z): com o foco dentro do video o proprio script do player trata;
+    // com o foco nesta pagina (por exemplo depois de clicar na barra) a pagina repassa o comando
+    var cmd = speedCmdFor(e);
+    if (cmd && S.current && !S.typing && !e.ctrlKey && !e.altKey && !e.metaKey && !body.classList.contains('home')) {
+      e.preventDefault();
+      if (cmd === 'reset' && e.repeat) return;
+      if (e.shiftKey && (cmd === 'faster' || cmd === 'slower')) cmd += 'Big';
+      sendToFrame(cmd);
+    }
   });
   document.addEventListener('paste', function (e) {
     if (e.target && e.target.id === 'url') return;       // o campo cuida do proprio colar
     var t = e.clipboardData ? e.clipboardData.getData('text') : '';
     if (t) { e.preventDefault(); handleText(t); }
+  });
+
+  // o script que vive dentro do player do YouTube (speed-frame.js) informa a velocidade atual
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || d.lmmp !== 1 || d.type !== 'rate') return;
+    if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(e.origin)) return;
+    S.rate = +d.rate || 1;
+    renderRate();
   });
 
   // arrastar um link de outro lugar e soltar na tela de link

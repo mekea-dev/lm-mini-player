@@ -22,8 +22,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace LMMiniPlayer
 {
@@ -382,6 +382,15 @@ namespace LMMiniPlayer
             st.AreBrowserAcceleratorKeysEnabled = false;
 
             core.SetVirtualHostNameToFolderMapping(VHost, webDir, CoreWebView2HostResourceAccessKind.Allow);
+
+            // velocidade livre e atalhos DENTRO do player do YouTube (iframe de outra origem: so da para
+            // mexer nele injetando o script em todos os quadros; o script so age no player incorporado)
+            string frameScript = Path.Combine(webDir, "speed-frame.js");
+            if (File.Exists(frameScript))
+            {
+                try { await core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(frameScript, System.Text.Encoding.UTF8)); }
+                catch (Exception ex) { AppLog.Error(ex); }
+            }
 
             core.WebMessageReceived += OnWebMessage;
             core.DocumentTitleChanged += delegate { Text = string.IsNullOrEmpty(core.DocumentTitle) ? "LM Mini Player" : core.DocumentTitle; };
