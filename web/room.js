@@ -1,19 +1,22 @@
 /*
- * LM Mini Player - salas: ver o mesmo video ao mesmo tempo que outras pessoas.
+ * LM Mini Player - salas: ver o mesmo video ao mesmo tempo que outras pessoas (e conversar por voz).
  *
- * A pagina pergunta ao servidor de salas (relay/worker.js) o estado da sala de tempos em tempos e manda
- * o player (speed-frame.js, dentro do YouTube) ficar igual; e, quando a pessoa pausa, toca, pula ou troca
- * de video, publica o novo estado. O estado leva a hora do SERVIDOR, entao cada um calcula a posicao
- * certa mesmo que a resposta demore. Nao transmite audio nem video: cada pessoa toca o proprio video.
+ * A pagina abre uma conexao WebSocket com a sala no servidor (relay/worker.js). Tudo chega na hora:
+ * quando alguem pausa, toca, pula, muda a velocidade ou troca de video, o servidor avisa todo mundo; quando
+ * alguem entra ou sai (ou fecha o programa) a lista de pessoas muda no mesmo instante. O estado leva a hora
+ * do SERVIDOR, entao cada um calcula a posicao certa mesmo com o relogio do computador adiantado ou atrasado.
+ * Nao transmite audio nem video: cada pessoa toca o proprio video (a voz vai direto entre os computadores:
+ * veja voice.js, que usa esta conexao so para os dois se encontrarem).
  *
  *   LMRoom.available()        o servidor de salas esta configurado?
  *   LMRoom.create(inicial)    cria uma sala (com o video atual, se houver) -> Promise(codigo)
  *   LMRoom.join(codigo)       entra numa sala -> Promise(codigo)
  *   LMRoom.leave()            sai da sala
- *   LMRoom.code() / status() / members()
+ *   LMRoom.code() / status() / members() / myId() / name() / setName(nome)
  *   LMRoom.publishLoad(info)  avisa a sala que a pessoa trocou de video
  *   LMRoom.onFrameEvent(ev)   avisa a sala de play/pause/pulo/velocidade (vindo do player)
- *   LMRoom.hooks              { changed, toast, applyRemote } preenchido pela pagina
+ *   LMRoom.send(obj)          manda uma mensagem solta para o servidor (voz); LMRoom.setVoice(on, mudo)
+ *   LMRoom.hooks              { changed, toast, applyRemote, signal, memberJoined, memberLeft, memberUpdated, opened, left }
  */
 (function () {
   'use strict';
@@ -21,22 +24,31 @@
   var ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';     // sem 0, 1, I, O (confundem)
   var CODE_LEN = 8;
   var CODE_RE = /^[A-HJ-NP-Z2-9]{6,12}$/;
+  var FATAL = { 4400: 'falha', 4404: 'sala_nao_encontrada', 4409: 'codigo_em_uso', 4413: 'sala_cheia', 4429: 'falha', 4000: 'trocada' };
+  var RETRY_MS = [1000, 2000, 3000, 5000, 8000, 10000];
+  var KEEPALIVE_MS = 20000;        // "estou aqui" (o servidor responde sem acordar a sala)
+  var SYNC_MS = 30000;             // refaz a conta do relogio
+  var DEAD_MS = 50000;             // sem ouvir nada do servidor por tanto tempo: a conexao morreu
 
   var hooks = {};
   var S = {
+    id: randomId(24),              // identifica ESTA janela (nao e guardado)
+    name: loadName(),
     code: null,
-    id: randomId(24),            // identifica ESTA janela (nao e guardado)
-    v: -1,                       // ultima versao do estado que ja aplicamos
-    state: null,                 // ultimo estado conhecido: { vid, list, pos, playing, rate, at, by }
-    members: 1,
-    status: 'off',               // off | ok | reconectando
-    offset: 0,                   // hora do servidor - hora local (ms)
+    ws: null,
+    status: 'off',                 // off | conectando | ok | reconectando
+    v: -1,                         // versao do estado que ja conhecemos
+    state: null,                   // { vid, list, pos, playing, rate, at, by }
+    members: [],                   // [{ id, name, voice, muted }]
+    offset: 0,                     // hora do servidor - hora local (ms)
     bestRtt: 1e9,
-    timer: 0,
-    busy: false,
-    failures: 0,
-    lastChangeAt: 0,
-    fastUntil: 0
+    retry: 0,
+    retryTimer: 0,
+    keepTimer: 0,
+    syncTimer: 0,
+    lastRx: 0,
+    leaving: false,
+    pending: null                  // { resolve, reject, create, initial } enquanto a primeira conexao nao termina
   };
 
   function randomId(n) {
@@ -47,37 +59,60 @@
     return s.toLowerCase();
   }
 
+  function loadName() {
+    try { return cleanName(window.localStorage.getItem('lmmp.name')); } catch (e) { return ''; }
+  }
+
+  function cleanName(n) {
+    n = typeof n === 'string' ? n : '';
+    n = n.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ').trim();
+    return Array.from(n).slice(0, 24).join('');
+  }
+
   function relayBase() {
     try { var o = window.localStorage.getItem('lmmp.relay'); if (o) return o; } catch (e) { /* ignora */ }
     return (window.LM_CONFIG && window.LM_CONFIG.relay) || '';
   }
 
+  function wsBase() { return relayBase().replace(/\/+$/, '').replace(/^http/i, 'ws'); }
+
   function available() { return !!relayBase(); }
   function serverNow() { return Date.now() + S.offset; }
   function notify() { if (hooks.changed) { try { hooks.changed(); } catch (e) { /* ignora */ } } }
+  function call(name, a, b) { if (hooks[name]) { try { hooks[name](a, b); } catch (e) { /* ignora */ } } }
 
   // ---- relogio: estima (hora do servidor - hora local) pela amostra de menor atraso ----
-  function sampleClock(j, t0, t1) {
-    if (!j || typeof j.now !== 'number') return;
-    var rtt = t1 - t0;
-    var off = j.now - (t0 + t1) / 2;
+  function sampleClock(c, now) {
+    var t1 = Date.now();
+    var rtt = t1 - c;
+    if (!(rtt >= 0) || rtt > 15000) return;
+    var off = now - (c + t1) / 2;
     if (rtt <= S.bestRtt) { S.bestRtt = rtt; S.offset = off; }
     else if (rtt <= S.bestRtt * 1.5 + 30) { S.offset = S.offset * 0.8 + off * 0.2; }
     S.bestRtt = S.bestRtt * 1.02 + 0.5;                 // a melhor amostra "envelhece" (a rede muda)
   }
 
-  function api(method, path, body) {
-    var t0 = Date.now();
-    var opts = { method: method, headers: {}, cache: 'no-store' };
-    if (body) { opts.body = JSON.stringify(body); opts.headers['content-type'] = 'application/json'; }
-    return fetch(relayBase().replace(/\/+$/, '') + path, opts).then(function (r) {
-      var t1 = Date.now();
-      return r.json().then(function (j) { j.__status = r.status; sampleClock(j, t0, t1); return j; },
-        function () { return { __status: r.status, error: 'resposta_invalida' }; });
-    });
+  function send(obj) {
+    var ws = S.ws;
+    if (!ws || ws.readyState !== 1) return false;
+    try { ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); return true; } catch (e) { return false; }
   }
 
-  // ---- entrar, criar, sair ----
+  function ping() { send({ t: 'ping', c: Date.now() }); }
+
+  function startTimers() {
+    stopTimers();
+    S.keepTimer = setInterval(function () {
+      if (Date.now() - S.lastRx > DEAD_MS) { try { S.ws && S.ws.close(); } catch (e) { /* ignora */ } return; }
+      send('ping');
+    }, KEEPALIVE_MS);
+    S.syncTimer = setInterval(ping, SYNC_MS);
+    [0, 250, 500, 800].forEach(function (ms) { setTimeout(ping, ms); });       // varias amostras logo ao entrar
+  }
+
+  function stopTimers() { clearInterval(S.keepTimer); clearInterval(S.syncTimer); S.keepTimer = 0; S.syncTimer = 0; }
+
+  // ---- codigo, entrar, criar, sair ----
   function makeCode() {
     var a = new Uint8Array(CODE_LEN);
     (window.crypto || window.msCrypto).getRandomValues(a);
@@ -86,89 +121,164 @@
     return s;
   }
 
-  function start(code) {
-    stop(true);
-    S.code = code; S.v = -1; S.state = null; S.failures = 0; S.status = 'ok'; S.members = 1;
-    S.lastChangeAt = Date.now();
-    notify();
+  function reset() {
+    var had = !!S.code;
+    stopTimers();
+    clearTimeout(S.retryTimer);
+    S.retryTimer = 0;
+    S.code = null; S.status = 'off'; S.v = -1; S.state = null; S.members = []; S.retry = 0;
+    S.pending = null;
+    if (had) call('left');                       // quem usa a sala (a voz) larga o que estava usando
+  }
+
+  function closeSocket() {
+    var ws = S.ws;
+    S.ws = null;
+    if (ws) { try { ws.onclose = null; ws.onmessage = null; ws.onerror = null; ws.close(1000); } catch (e) { /* ignora */ } }
   }
 
   function stop(silent) {
-    clearTimeout(S.timer);
-    S.timer = 0; S.code = null; S.status = 'off'; S.v = -1; S.state = null; S.busy = false;
+    S.leaving = true;
+    closeSocket();
+    reset();
     if (!silent) notify();
+  }
+
+  function connect(code, create, initial) {
+    return new Promise(function (resolve, reject) {
+      stop(true);
+      S.leaving = false;
+      S.code = code;
+      S.status = 'conectando';
+      S.pending = { resolve: resolve, reject: reject, create: create, initial: initial };
+      openSocket(create);
+      notify();
+    });
+  }
+
+  function openSocket(create) {
+    var url = wsBase() + '/ws/' + S.code + '?id=' + S.id + '&name=' + encodeURIComponent(S.name || 'Visitante') + (create ? '&create=1' : '');
+    var ws;
+    try { ws = new WebSocket(url); } catch (e) { failPending('falha'); return; }
+    S.ws = ws;
+    ws.onopen = function () { if (ws === S.ws) S.lastRx = Date.now(); };
+    ws.onmessage = function (ev) { if (ws === S.ws) { S.lastRx = Date.now(); onMessage(ev.data); } };
+    ws.onerror = function () { /* o "close" vem logo depois */ };
+    ws.onclose = function (ev) { if (ws === S.ws) onClose(ev); };
+  }
+
+  function failPending(key) {
+    var p = S.pending;
+    stop(true);
+    S.leaving = false;
+    notify();
+    if (p) p.reject(new Error(key));
+  }
+
+  function onClose(ev) {
+    S.ws = null;
+    stopTimers();
+    var key = FATAL[ev && ev.code];
+    if (S.pending) { failPending(key || 'falha'); return; }               // a primeira conexao nao deu certo
+    if (key) {                                                            // a sala acabou (ou nos recusou) com a gente la dentro
+      stop(true);
+      S.leaving = false;
+      if (key !== 'trocada') call('toast', key === 'sala_nao_encontrada' ? 'A sala foi encerrada' : (key === 'sala_cheia' ? 'A sala está cheia' : 'Você foi desconectado da sala'));
+      notify();
+      return;
+    }
+    S.status = 'reconectando';                                            // caiu a rede: volta sozinho
+    notify();
+    var wait = RETRY_MS[Math.min(S.retry, RETRY_MS.length - 1)];
+    S.retry++;
+    S.retryTimer = setTimeout(function () { if (S.code && !S.ws && !S.leaving) openSocket(false); }, wait);
+  }
+
+  function onMessage(text) {
+    if (text === 'pong') return;
+    var m;
+    try { m = JSON.parse(text); } catch (e) { return; }
+    if (!m || typeof m !== 'object') return;
+
+    switch (m.t) {
+      case 'hello': {
+        var prevV = S.v;
+        S.status = 'ok';
+        S.retry = 0;
+        S.v = m.v;
+        S.state = m.state;
+        S.members = m.members || [];
+        S.offset = m.now - Date.now();               // primeira estimativa (o erro e o atraso de uma volta); os pings refinam
+        S.bestRtt = 1e9;
+        startTimers();
+        var p = S.pending;
+        S.pending = null;
+        if (p && p.create && p.initial) publish(p.initial);
+        call('opened');
+        notify();
+        if (m.state && (!p || !p.create) && m.v !== prevV) applyRemote(m.state);   // entrou (ou voltou) e a sala tem algo tocando
+        if (p) p.resolve(S.code);
+        break;
+      }
+      case 'join':
+        upsert(m.m);
+        if (m.m && m.m.id !== S.id) call('toast', (m.m.name || 'Alguém') + ' entrou na sala');
+        call('memberJoined', m.m);
+        notify();
+        break;
+      case 'leave': {
+        var who = find(m.id);
+        S.members = S.members.filter(function (x) { return x.id !== m.id; });
+        if (who && who.id !== S.id) call('toast', (who.name || 'Alguém') + ' saiu da sala');
+        call('memberLeft', m.id);
+        notify();
+        break;
+      }
+      case 'member':
+        upsert(m.m);
+        call('memberUpdated', m.m);
+        notify();
+        break;
+      case 'state':
+        S.v = m.v;
+        S.state = m.state;
+        if (m.state && m.state.by !== S.id) applyRemote(m.state);
+        break;
+      case 'sig':
+        call('signal', m.from, m.data);
+        break;
+      case 'pong':
+        sampleClock(m.c, m.now);
+        break;
+    }
+  }
+
+  function find(id) { for (var i = 0; i < S.members.length; i++) if (S.members[i].id === id) return S.members[i]; return null; }
+
+  function upsert(mem) {
+    if (!mem || !mem.id) return;
+    for (var i = 0; i < S.members.length; i++) {
+      if (S.members[i].id === mem.id) { S.members[i] = mem; return; }
+    }
+    S.members.push(mem);
   }
 
   function create(initial) {
     if (!available()) return Promise.reject(new Error('sem_servidor'));
-    var code = makeCode();
-    return api('POST', '/api/room/' + code, { id: S.id, op: 'create' }).then(function (j) {
-      if (j.__status === 409) return create(initial);                     // codigo repetido (improvavel)
-      if (j.__status !== 200) throw new Error(j.error || 'falha');
-      start(code);
-      var p = initial ? publish(initial) : Promise.resolve();
-      return p.then(function () { schedule(1000); return code; });
-    });
+    function attempt(tries) {
+      return connect(makeCode(), true, initial).then(null, function (err) {
+        if (err && err.message === 'codigo_em_uso' && tries < 3) return attempt(tries + 1);   // codigo repetido (improvavel)
+        throw err;
+      });
+    }
+    return attempt(0);
   }
 
   function join(codeRaw) {
     var code = String(codeRaw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!CODE_RE.test(code)) return Promise.reject(new Error('codigo_invalido'));
     if (!available()) return Promise.reject(new Error('sem_servidor'));
-    return api('GET', '/api/room/' + code + '?since=-1&id=' + S.id).then(function (j) {
-      if (j.__status === 404) throw new Error('sala_nao_encontrada');
-      if (j.__status !== 200) throw new Error(j.error || 'falha');
-      start(code);
-      handlePoll(j);
-      schedule(interval());
-      return code;
-    });
-  }
-
-  // ---- perguntar o estado de tempos em tempos ----
-  function interval() {
-    var now = Date.now();
-    if (S.failures > 0) return Math.min(10000, 2000 * S.failures);
-    if (now < S.fastUntil) return 400;                                    // logo apos uma acao: acompanha de perto
-    if (now - S.lastChangeAt > 120000) return 2000;                       // sala parada ha 2 min: pergunta um pouco menos
-    return 1000;
-  }
-
-  function schedule(ms) { clearTimeout(S.timer); if (S.code) S.timer = setTimeout(poll, ms); }
-
-  function poll() {
-    if (!S.code) return;
-    if (S.busy) { schedule(interval()); return; }
-    S.busy = true;
-    var code = S.code;
-    api('GET', '/api/room/' + code + '?since=' + S.v + '&id=' + S.id).then(function (j) {
-      S.busy = false;
-      if (code !== S.code) return;
-      if (j.__status === 404) { if (hooks.toast) hooks.toast('A sala foi encerrada'); stop(); return; }
-      if (j.__status !== 200) throw new Error(j.error || 'falha');
-      S.failures = 0;
-      if (S.status !== 'ok') { S.status = 'ok'; notify(); }
-      handlePoll(j);
-      schedule(interval());
-    }).catch(function () {
-      S.busy = false;
-      if (code !== S.code) return;
-      S.failures++;
-      if (S.status !== 'reconectando') { S.status = 'reconectando'; notify(); }
-      schedule(interval());
-    });
-  }
-
-  function handlePoll(j) {
-    if (typeof j.members === 'number' && j.members !== S.members) { S.members = j.members; notify(); }
-    if (j.state !== undefined && j.v !== S.v) {                           // o estado mudou
-      S.v = j.v;
-      S.lastChangeAt = Date.now();
-      S.state = j.state;
-      if (j.state) applyRemote(j.state);
-    } else if (typeof j.v === 'number') {
-      S.v = j.v;
-    }
+    return connect(code, false, null);
   }
 
   // posicao em que o video deveria estar agora
@@ -185,7 +295,7 @@
 
   // ---- publicar o que ESTA pessoa fez ----
   function publish(partial) {
-    if (!S.code) return Promise.resolve();
+    if (!S.code || S.status !== 'ok') return;
     var cur = S.state || {};
     var st = {
       vid: partial.vid !== undefined ? partial.vid : cur.vid,
@@ -194,14 +304,8 @@
       playing: partial.playing !== undefined ? partial.playing : !!cur.playing,
       rate: partial.rate !== undefined ? partial.rate : (cur.rate || 1)
     };
-    if (!st.vid && !st.list) return Promise.resolve();
-    S.fastUntil = Date.now() + 3000;
-    var code = S.code;
-    return api('POST', '/api/room/' + code, { id: S.id, op: 'set', state: st }).then(function (j) {
-      if (code !== S.code) return j;
-      if (j.__status === 200) { S.v = j.v; S.state = j.state; S.lastChangeAt = Date.now(); schedule(400); }
-      return j;
-    }).catch(function () { /* o proximo poll recupera */ });
+    if (!st.vid && !st.list) return;
+    send({ t: 'set', st: st });
   }
 
   function publishLoad(info) {
@@ -220,6 +324,15 @@
     publish(p);
   }
 
+  function setName(n) {
+    S.name = cleanName(n);
+    try { window.localStorage.setItem('lmmp.name', S.name); } catch (e) { /* ignora */ }
+    if (S.code && S.name) send({ t: 'name', name: S.name });
+  }
+
+  // fechar a janela: sai da sala na hora (sem esperar a conexao cair)
+  window.addEventListener('pagehide', function () { if (S.ws) { try { S.ws.close(1000); } catch (e) { /* ignora */ } } });
+
   window.LMRoom = {
     hooks: hooks,
     available: available,
@@ -228,11 +341,17 @@
     leave: function () { stop(); },
     code: function () { return S.code; },
     status: function () { return S.status; },
-    members: function () { return S.members; },
+    members: function () { return S.members.slice(); },
+    myId: function () { return S.id; },
+    name: function () { return S.name; },
+    setName: setName,
     state: function () { return S.state ? Object.assign({ target: targetOf(S.state) }, S.state) : null; },
     offset: function () { return S.offset; },
     serverNow: serverNow,
     publishLoad: publishLoad,
-    onFrameEvent: onFrameEvent
+    onFrameEvent: onFrameEvent,
+    send: send,
+    setVoice: function (on, muted) { return send({ t: 'voice', on: !!on, muted: !!muted }); },
+    __drop: function () { if (S.ws) { try { S.ws.close(4001); } catch (e) { /* ignora */ } } }     // so para testes: simula a rede caindo
   };
 })();

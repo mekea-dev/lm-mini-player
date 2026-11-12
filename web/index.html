@@ -78,6 +78,18 @@
     <symbol id="i-download" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></g>
     </symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></g>
+    </symbol>
+    <symbol id="i-mic-off" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M18.9 13.2A7 7 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1"/><path d="M12 19v3"/></g>
+    </symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></g>
+    </symbol>
+    <symbol id="i-volume-x" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></g>
+    </symbol>
   </defs>
 </svg>
 
@@ -128,6 +140,7 @@
   <button type="button" class="chip" id="bSpeed" hidden title="Velocidade do vídeo: D acelera, S desacelera, R volta a 1× (ou clique aqui)" aria-label="Velocidade do vídeo">1×</button>
   <button type="button" class="ib" id="bLink" title="Pesquisar ou colar link (Ctrl+L)" aria-label="Pesquisar ou colar link"><svg class="i"><use href="#i-search"/></svg></button>
   <button type="button" class="ib" id="bRoom" title="Sala: ver o mesmo vídeo junto com outras pessoas" aria-label="Sala"><svg class="i"><use href="#i-users"/></svg></button>
+  <button type="button" class="ib" id="bMic" hidden title="Entrar na voz" aria-label="Microfone"><svg class="i"><use href="#i-mic"/></svg></button>
   <button type="button" class="ib" id="bOp"    title="Transparência da janela" aria-label="Transparência da janela"><svg class="i"><use href="#i-opacity"/></svg></button>
   <button type="button" class="ib on" id="bPin" title="Sempre por cima das outras janelas" aria-label="Sempre por cima" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg></button>
   <button type="button" class="ib" id="bMin"   title="Minimizar" aria-label="Minimizar"><svg class="i"><use href="#i-min"/></svg></button>
@@ -169,7 +182,8 @@
     <button type="button" class="ib rp-x" id="rpClose" title="Fechar" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2>Sala</h2>
     <div id="rpOut">
-      <p class="rp-txt">Todo mundo na sala vê o mesmo vídeo ao mesmo tempo: quem põe, pausa ou pula, muda para todos. Cada pessoa toca o seu próprio vídeo (não é transmissão de tela).</p>
+      <p class="rp-txt">Todo mundo na sala vê o mesmo vídeo ao mesmo tempo (quem põe, pausa ou pula, muda para todos) e pode conversar por voz. Cada pessoa toca o seu próprio vídeo.</p>
+      <input id="rpName" class="rp-name" type="text" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Seu nome" aria-label="Seu nome na sala">
       <button type="button" class="btn primary" id="rpCreate">Criar sala</button>
       <form id="rpJoinForm" class="field" autocomplete="off">
         <input id="rpCode" type="text" spellcheck="false" autocapitalize="characters" maxlength="14" placeholder="Código da sala" aria-label="Código da sala">
@@ -177,12 +191,22 @@
       </form>
     </div>
     <div id="rpIn" hidden>
-      <div class="rp-code" id="rpCodeShow" title="Código da sala">--------</div>
-      <p class="rp-txt" id="rpInfo">1 pessoa na sala</p>
-      <div class="rp-row">
-        <button type="button" class="btn" id="rpCopy"><svg class="i"><use href="#i-copy"/></svg><span>Copiar código</span></button>
-        <button type="button" class="btn ghost" id="rpLeave">Sair da sala</button>
+      <div class="rp-top">
+        <div class="rp-code" id="rpCodeShow" title="Código da sala">--------</div>
+        <button type="button" class="btn sm" id="rpCopy" title="Copiar o código"><svg class="i"><use href="#i-copy"/></svg><span>Copiar</span></button>
       </div>
+      <p class="rp-txt" id="rpInfo">1 pessoa na sala</p>
+      <ul class="rp-members" id="rpMembers"></ul>
+      <div class="rp-voice">
+        <button type="button" class="btn" id="rpMic"><svg class="i"><use href="#i-mic"/></svg><span id="rpMicText">Entrar na voz</span></button>
+        <button type="button" class="btn ghost" id="rpVoiceOff" hidden>Sair da voz</button>
+      </div>
+      <div class="rp-vols">
+        <label class="rp-vol"><span>Vídeo</span><input type="range" id="rpVidVol" min="0" max="100" step="1" aria-label="Volume do vídeo"></label>
+        <label class="rp-vol"><span>Vozes</span><input type="range" id="rpVoiceVol" min="0" max="100" step="1" aria-label="Volume das vozes"></label>
+      </div>
+      <label class="rp-me"><span>Seu nome</span><input id="rpName2" type="text" maxlength="24" spellcheck="false" autocomplete="off" aria-label="Seu nome na sala"></label>
+      <div class="rp-row"><button type="button" class="btn ghost" id="rpLeave">Sair da sala</button></div>
     </div>
     <p class="rp-msg" id="rpMsg" role="status"></p>
   </div>
@@ -199,6 +223,7 @@
 <script src="config.js"></script>
 <script src="link.js"></script>
 <script src="room.js"></script>
+<script src="voice.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

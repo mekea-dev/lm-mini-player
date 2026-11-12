@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
 
 namespace LMMiniPlayer
 {
@@ -489,7 +489,14 @@ namespace LMMiniPlayer
             core.DocumentTitleChanged += delegate { Text = string.IsNullOrEmpty(core.DocumentTitle) ? "LM Mini Player" : core.DocumentTitle; };
             core.ContainsFullScreenElementChanged += OnFullScreenChanged;
             core.ProcessFailed += OnProcessFailed;
-            core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e) { e.State = CoreWebView2PermissionState.Deny; };
+            // so a nossa pagina pode usar o microfone (voz nas salas); camera, localizacao, notificacoes etc. e qualquer
+            // outro site (o iframe do YouTube, por exemplo) ficam negados
+            core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
+            {
+                bool ours = e.Uri != null && e.Uri.StartsWith("https://" + VHost + "/", StringComparison.OrdinalIgnoreCase);
+                e.State = (ours && e.PermissionKind == CoreWebView2PermissionKind.Microphone)
+                    ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+            };
             // cliques que abririam outra janela (logo do YouTube, canal...) vao para o navegador padrao
             core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e) { e.Handled = true; OpenExternal(e.Uri); };
             // a janela principal nunca sai da nossa pagina

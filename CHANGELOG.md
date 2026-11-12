@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## v1.4.0 - 2026-11-12
+
+- **Conversa por voz nas salas.** Dentro de uma sala, o botão de **microfone** (na barra de cima e no painel da sala) liga a voz, como num Discord: todo mundo ouve todo mundo enquanto assiste junto. O áudio vai **direto entre os computadores** (WebRTC), sem passar pelo servidor. Tem **dois volumes separados**, o do vídeo e o das vozes, **volume e silenciar por pessoa** (só para você), o silenciar do seu próprio microfone, um contorno verde em quem está falando e o ícone vermelho em quem está mudo. Dá para entrar na voz só para ouvir, sem microfone. **Use fones de ouvido** para não gerar eco. Até 8 pessoas por sala. Em redes muito restritas (algumas de empresas e faculdades) a voz pode não conectar; o vídeo continua sincronizado.
+- **Sincronia em tempo real.** O servidor das salas agora mantém uma conexão aberta com cada pessoa (WebSocket com Durable Objects, no Cloudflare), em vez de ser consultado a cada segundo. Pausa, play, pulo, velocidade e troca de vídeo chegam aos outros em menos de meio segundo (antes passava de 1 segundo), e o relógio de cada computador é medido de novo de tempos em tempos para manter o ponto do vídeo certo.
+- **Quem sai da sala some na hora.** Sair, fechar a janela ou encerrar o programa tira a pessoa da lista em menos de meio segundo (antes ela continuava aparecendo por até 30 segundos). Se a internet cair de repente, a pessoa tem 5 segundos para voltar sem que ninguém perceba; passado isso, sai da lista e volta a entrar sozinha quando a conexão voltar.
+- **Nomes na sala.** Você escolhe um nome (fica lembrado), o painel mostra quem está na sala e aparecem avisos de "X entrou na sala" e "X saiu da sala".
+- A barra de cima ganhou o botão do microfone e continua sem cortar nenhum botão em qualquer largura de janela (de 240 a 700 px e mais).
+- Salas e programas da 1.3.x continuam funcionando com o servidor novo, só sem o tempo real e a voz. **Quem monta o próprio servidor:** ele agora é um Worker com Durable Object e não usa mais o D1; o passo a passo atualizado está em `relay/LEIA-ME.md`.
+- Privacidade: o microfone só é ligado quando você clica no botão, e só o próprio programa pode usá-lo (o YouTube e outros sites dentro dele, não). Quem está na voz enxerga o endereço IP das outras pessoas na voz, como em qualquer chamada direta pela internet.
+
 ## v1.3.1 - 2026-11-12
 
 - **Salas no ar.** O servidor de salas (Cloudflare, plano grátis) já está funcionando e o botão **Sala** (ícone de pessoas) aparece na barra de cima e na tela inicial. **Criar sala** mostra um código de 8 letras e números; quem tem o código usa **Entrar**. Quem põe, pausa, pula, muda a velocidade ou troca de vídeo, muda para todos, e cada pessoa toca o seu próprio vídeo (não é transmissão de tela). Pequenos atrasos são corrigidos sozinhos, mesmo com o relógio do computador adiantado ou atrasado. Esta versão chega sozinha a quem já tem a 1.3.0.

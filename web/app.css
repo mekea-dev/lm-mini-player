@@ -404,6 +404,89 @@ body.browse #toast { top: 7px; z-index: 40; }
   user-select: text;
 }
 .rp-msg { min-height: 1.2em; margin: .7rem 0 0; font-size: .85rem; color: var(--accent-hi); }
+.rp-name {
+  width: 100%;
+  height: 2.4rem;
+  margin: 0 0 .6rem;
+  padding: 0 .8rem;
+  font: inherit;
+  font-size: .95rem;
+  text-align: center;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .7rem;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.rp-name:focus, .rp-me input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 74, 67, .22); }
+.rp-top { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-bottom: .45rem; }
+.rp-top .rp-code { margin: 0; }
+.btn.sm { height: 2rem; padding: 0 .7rem; font-size: .85rem; }
+
+/* quem esta na sala: avatar, nome, estado da voz, volume e silenciar (so para voce) */
+.rp-members { list-style: none; margin: .3rem 0 .6rem; padding: 0; display: grid; gap: .3rem; text-align: left; }
+.rp-m {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: .45rem;
+  padding: .25rem .4rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .7rem;
+}
+.rp-m .av {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: .85rem;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 0 0 2px transparent;
+  transition: box-shadow .12s ease;
+}
+.rp-m.speaking .av { box-shadow: 0 0 0 2px #5ee0a0; }
+.rp-m .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.rp-m .nm i { margin-left: .25rem; font-size: .78rem; font-style: normal; color: var(--muted); }
+.rp-m.novoice .nm { color: var(--muted); }
+.rp-m .st { width: 1.4rem; height: 1.4rem; display: grid; place-items: center; color: var(--muted); }
+.rp-m .st .i { width: 1rem; height: 1rem; }
+.rp-m .st.on { color: #5ee0a0; }
+.rp-m .st.off { color: var(--accent-hi); }
+.rp-m .st.warn { color: #ffb74d; }
+.rp-m .pv { width: 5.5rem; accent-color: var(--accent-hi); }
+.rp-m .pm { width: 1.8rem; height: 1.8rem; }
+.rp-m .pm .i { width: 1rem; height: 1rem; }
+.rp-m .pm.on { color: var(--accent-hi); }
+.rp-voice { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center; margin-bottom: .5rem; }
+.rp-voice .btn.live { background: rgba(94, 224, 160, .14); border-color: rgba(94, 224, 160, .5); }
+.rp-voice .btn.muted { background: rgba(255, 74, 67, .14); border-color: rgba(255, 106, 94, .55); }
+.rp-vols { display: grid; gap: .3rem; margin-bottom: .5rem; }
+.rp-vol, .rp-me { display: grid; grid-template-columns: 3.6rem 1fr; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); text-align: left; }
+.rp-vol input { width: 100%; accent-color: var(--accent-hi); }
+.rp-me { margin-bottom: .4rem; }
+.rp-me input {
+  width: 100%;
+  height: 2rem;
+  padding: 0 .7rem;
+  font: inherit;
+  font-size: .88rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.ib.mic-on { color: #5ee0a0; }
+.ib.mic-muted { color: var(--accent-hi); }
+@media (max-width: 420px) { .rp-m .pv { display: none; } }
+@media (max-height: 260px) { .rp-me { display: none; } }
 body.browse .roompanel { display: none; }
 @media (max-height: 230px) { .rp-txt { display: none; } .rp-code { font-size: 1.2rem; } }
 @media (max-height: 170px) {
@@ -521,6 +604,12 @@ body.browse .upd, #roomPanel:not([hidden]) ~ .upd { display: none !important; }
 @media (max-width: 380px) {
   #bOp, #bLink { display: none; }
 }
+/* janelas estreitas: botoes um pouco menores e a area de arrastar so com a "alca", para caberem
+   o microfone e o fechar dentro do espaco que sobra ao lado dos botoes do YouTube */
+@media (max-width: 380px) {
+  .bar .ib { width: 28px; }
+  .bar .drag { min-width: 28px; }
+}
 @media (max-width: 300px) {
   .ttl, #bRoom { display: none; }
 }
@@ -534,9 +623,16 @@ body.browse .upd, #roomPanel:not([hidden]) ~ .upd { display: none !important; }
 @media (max-width: 540px) { body.playing:not(.home):not(.err) #bLink  { display: none; } }
 @media (max-width: 499px) { body.playing:not(.home):not(.err) .ttl     { display: none; } }
 @media (max-width: 470px) { body.playing:not(.home):not(.err) #bOp     { display: none; } }
-@media (max-width: 430px) { body.playing:not(.home):not(.err) #bRoom   { display: none; } }
+@media (max-width: 430px) { body.playing:not(.in-room):not(.home):not(.err) #bRoom { display: none; } }
 @media (max-width: 400px) { body.playing:not(.home):not(.err) #bPin    { display: none; } }
 @media (max-width: 365px) { body.playing:not(.home):not(.err) #bSpeed  { display: none; } }
+/* dentro de uma sala o microfone e o botao da sala ganham prioridade na pilula: os outros saem primeiro */
+@media (max-width: 600px) { body.in-room.playing:not(.home):not(.err) #bLink  { display: none; } }
+@media (max-width: 560px) { body.in-room.playing:not(.home):not(.err) .ttl    { display: none; } }
+@media (max-width: 520px) { body.in-room.playing:not(.home):not(.err) #bOp    { display: none; } }
+@media (max-width: 480px) { body.in-room.playing:not(.home):not(.err) #bPin   { display: none; } }
+@media (max-width: 440px) { body.in-room.playing:not(.home):not(.err) #bSpeed { display: none; } }
+@media (max-width: 339px) { body.in-room.playing:not(.home):not(.err) #bRoom  { display: none; } }
 /* tela inicial: os botoes de baixo ficam so com icone quando a janela e estreita */
 @media (max-width: 440px) { .alt .btn span { display: none; } .alt .btn { padding: 0 .9rem; } }
 /* barra do modo navegacao: so icones nas abas quando a janela e estreita */

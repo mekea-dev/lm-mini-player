@@ -175,7 +175,9 @@
     return 1;
   }
 
-  /* ---------- sala: ver o mesmo video junto com outras pessoas ---------- */
+  /* ---------- sala: ver o mesmo video junto com outras pessoas (e conversar por voz) ---------- */
+
+  var Voice = window.LMVoice;
 
   function sendToFrameRaw(obj) {
     try {
@@ -199,7 +201,15 @@
     if (m === 'sem_servidor') return 'Salas desligadas: o servidor de salas ainda não foi configurado.';
     if (m === 'codigo_invalido') return 'Código inválido. Ele tem de 6 a 12 letras e números.';
     if (m === 'sala_nao_encontrada') return 'Sala não encontrada. Confira o código.';
+    if (m === 'sala_cheia') return 'A sala está cheia (até 8 pessoas).';
     return 'Não foi possível falar com o servidor de salas.';
+  }
+
+  function micErrorText(e) {
+    if (e === 'NotAllowedError' || e === 'SecurityError') return 'O microfone está bloqueado. No Windows: Configurações > Privacidade > Microfone, e permita que aplicativos da área de trabalho usem o microfone. Você entrou só ouvindo.';
+    if (e === 'NotFoundError' || e === 'OverconstrainedError') return 'Nenhum microfone encontrado. Você entrou na voz só ouvindo.';
+    if (e === 'NotReadableError' || e === 'AbortError') return 'O microfone está em uso por outro programa. Você entrou na voz só ouvindo.';
+    return 'Não consegui usar o microfone. Você entrou na voz só ouvindo.';
   }
 
   // o que esta tocando agora, para a sala nova ja nascer com o video atual
@@ -210,12 +220,121 @@
     return { vid: S.current.id || null, list: S.current.list || null, pos: pos, playing: playing, rate: S.rate || 1 };
   }
 
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function icon(id) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var s = document.createElementNS(ns, 'svg');
+    s.setAttribute('class', 'i');
+    var u = document.createElementNS(ns, 'use');
+    u.setAttribute('href', '#' + id);
+    s.appendChild(u);
+    return s;
+  }
+
+  function colorFor(id) {
+    var h = 0;
+    for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+    return 'hsl(' + h + ' 55% 42%)';
+  }
+
+  // volume do video (o do player do YouTube), separado do volume das vozes
+  function syncVolumes() {
+    var v = $('rpVidVol');
+    if (document.activeElement !== v) {
+      try { if (S.player && S.player.getVolume) v.value = S.player.isMuted && S.player.isMuted() ? 0 : S.player.getVolume(); } catch (e) { /* ignora */ }
+    }
+    var vv = $('rpVoiceVol');
+    if (Voice && document.activeElement !== vv) vv.value = Math.round(Voice.masterVolume() * 100);
+  }
+
+  // lista de quem esta na sala (nomes vem de outras pessoas: sempre como texto, nunca como HTML)
+  function renderMembers(list) {
+    if (S.dragVol) return;                                              // nao refaz a lista no meio de um arraste de volume
+    var ul = $('rpMembers');
+    var me = Room.myId();
+    var sorted = list.slice().sort(function (a, b) { return (b.id === me ? 1 : 0) - (a.id === me ? 1 : 0); });
+    while (ul.firstChild) ul.removeChild(ul.firstChild);
+    var inVoice = !!(Voice && Voice.isOn());
+    sorted.forEach(function (m) {
+      var mine = m.id === me;
+      var key = mine ? 'me' : m.id;
+      var voiceOn = mine ? inVoice : !!m.voice;
+      var muted = mine ? !!(Voice && Voice.isMuted()) : !!m.muted;
+      var li = el('li', 'rp-m' + (voiceOn ? '' : ' novoice'));
+      li.setAttribute('data-mid', key);
+      if (Voice && Voice.speaking(key)) li.classList.add('speaking');
+      var av = el('span', 'av', (Array.from(m.name || '?')[0] || '?').toUpperCase());
+      av.style.background = colorFor(m.id);
+      li.appendChild(av);
+      var nm = el('span', 'nm', m.name || 'Visitante');
+      if (mine) nm.appendChild(el('i', null, '(você)'));
+      li.appendChild(nm);
+
+      var st = el('span', 'st');
+      if (voiceOn) {
+        var broken = !mine && inVoice && Voice.peerState(m.id) === 'falhou';
+        st.classList.add(broken ? 'warn' : (muted ? 'off' : 'on'));
+        st.title = broken ? 'Sem conexão de voz com ' + (m.name || 'esta pessoa') : (muted ? 'Microfone silenciado' : 'Na voz');
+        st.appendChild(icon(muted ? 'i-mic-off' : 'i-mic'));
+      }
+      li.appendChild(st);
+
+      if (!mine && voiceOn && inVoice) {                                // volume e silenciar essa pessoa (so para voce)
+        var p = Voice.person(m.id);
+        var pv = el('input', 'pv');
+        pv.type = 'range'; pv.min = '0'; pv.max = '100'; pv.step = '1';
+        pv.value = String(Math.round(p.vol * 100));
+        pv.setAttribute('data-vid', m.id);
+        pv.title = 'Volume de ' + (m.name || 'esta pessoa');
+        pv.setAttribute('aria-label', pv.title);
+        li.appendChild(pv);
+        var pm = el('button', 'ib pm' + (p.mute ? ' on' : ''));
+        pm.type = 'button';
+        pm.setAttribute('data-vid', m.id);
+        pm.title = (p.mute ? 'Deixar de silenciar ' : 'Silenciar ') + (m.name || 'esta pessoa') + ' (só para você)';
+        pm.setAttribute('aria-label', pm.title);
+        pm.appendChild(icon(p.mute ? 'i-volume-x' : 'i-volume'));
+        li.appendChild(pm);
+      }
+      ul.appendChild(li);
+    });
+  }
+
+  function renderVoice() {
+    var inRoom = !!Room.code();
+    var sup = !!(Voice && Voice.supported());
+    var on = !!(Voice && Voice.isOn());
+    var muted = on && Voice.isMuted();
+    var bm = $('bMic');
+    bm.hidden = !(inRoom && sup);
+    bm.classList.toggle('mic-on', on && !muted);
+    bm.classList.toggle('mic-muted', on && muted);
+    bm.querySelector('use').setAttribute('href', on && muted ? '#i-mic-off' : '#i-mic');
+    bm.title = !on ? 'Entrar na voz (liga o microfone)' : (muted ? 'Microfone silenciado: clique para ligar' : 'Microfone ligado: clique para silenciar');
+    var rm = $('rpMic');
+    rm.hidden = !sup;
+    rm.classList.toggle('live', on && !muted);
+    rm.classList.toggle('muted', on && muted);
+    rm.querySelector('use').setAttribute('href', on && muted ? '#i-mic-off' : '#i-mic');
+    $('rpMicText').textContent = !on ? 'Entrar na voz' : (muted ? 'Ligar microfone' : 'Silenciar microfone');
+    $('rpVoiceOff').hidden = !on;
+  }
+
   function openRoomPanel() {
     clearError();
     $('roomPanel').hidden = false;
+    $('rpName').value = Room.name();
+    $('rpName2').value = Room.name();
     renderRoom();
     roomMsg('');
-    if (!Room.code()) setTimeout(function () { $('rpCode').focus(); }, 30);
+    syncVolumes();
+    if (!Room.code()) setTimeout(function () { (Room.name() ? $('rpCode') : $('rpName')).focus(); }, 30);
   }
 
   function closeRoomPanel() { $('roomPanel').hidden = true; focusPlayer(); }
@@ -227,19 +346,24 @@
     $('roomHome').hidden = !avail;
     var code = Room.code();
     var on = !!code;
+    var list = Room.members();
+    var n = list.length || 1;
     var b = $('bRoom');
-    var n = Room.members();
     b.classList.toggle('room-on', on);
     b.title = on
       ? 'Sala ' + code + ': ' + n + (n === 1 ? ' pessoa' : ' pessoas') + ' (clique para ver)'
       : 'Sala: ver o mesmo vídeo junto com outras pessoas';
+    body.classList.toggle('in-room', on);
     $('rpOut').hidden = on;
     $('rpIn').hidden = !on;
     if (on) {
       $('rpCodeShow').textContent = code;
       $('rpInfo').textContent = (Room.status() === 'reconectando' ? 'Reconectando… ' : '') +
         n + (n === 1 ? ' pessoa na sala' : ' pessoas na sala');
+      renderMembers(list);
+      syncVolumes();
     }
+    renderVoice();
     sendToFrameRaw({ type: 'roomOn', on: on });
   }
 
@@ -255,6 +379,15 @@
     }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fallback);
     else fallback();
+  }
+
+  // para criar ou entrar a pessoa precisa de um nome (e ele fica guardado para a proxima vez)
+  function ensureName() {
+    var n = $('rpName').value.replace(/\s+/g, ' ').trim();
+    if (!n) { roomMsg('Digite o seu nome para os outros saberem quem é você.'); $('rpName').focus(); return false; }
+    Room.setName(n);
+    $('rpName2').value = Room.name();
+    return true;
   }
 
   // o estado da sala chegou: mesmo video -> manda o player ficar igual; outro video -> carrega o da sala
@@ -276,17 +409,67 @@
     if (Room.code()) sendToFrameRaw({ type: 'roomclock', offset: Room.offset() });
   }, 8000);
 
+  // voz: microfone (barra e painel), volume de cada pessoa, volume das vozes e do video
+  function micClick() {
+    if (!Voice) return;
+    if (!Voice.isOn()) {
+      roomMsg('Entrando na voz…');
+      Voice.start().then(function (r) {
+        roomMsg(!r.ok ? 'Não foi possível entrar na voz.' : (r.micError ? micErrorText(r.micError) : ''));
+        if (r.micError && $('roomPanel').hidden) toast('Você entrou na voz só ouvindo');
+        renderRoom();
+      });
+    } else {
+      Voice.toggleMute().then(function () {
+        var e = Voice.micError();
+        roomMsg(e ? micErrorText(e) : '');
+        renderRoom();
+      });
+    }
+  }
+  $('bMic').addEventListener('click', function () { micClick(); focusPlayer(); });
+  $('rpMic').addEventListener('click', micClick);
+  $('rpVoiceOff').addEventListener('click', function () { if (Voice) Voice.stop(); roomMsg(''); renderRoom(); });
+  $('rpVidVol').addEventListener('input', function () {
+    var v = Math.max(0, Math.min(100, +$('rpVidVol').value || 0));
+    try { if (S.player && S.player.setVolume) { S.player.setVolume(v); if (v > 0 && S.player.isMuted && S.player.isMuted()) S.player.unMute(); } } catch (e) { /* ignora */ }
+  });
+  $('rpVoiceVol').addEventListener('input', function () { if (Voice) Voice.masterVolume((+$('rpVoiceVol').value || 0) / 100); });
+  $('rpMembers').addEventListener('input', function (e) {
+    var t = e.target;
+    if (Voice && t.classList && t.classList.contains('pv')) Voice.setPersonVolume(t.getAttribute('data-vid'), (+t.value || 0) / 100);
+  });
+  $('rpMembers').addEventListener('pointerdown', function (e) { if (e.target.classList && e.target.classList.contains('pv')) S.dragVol = true; });
+  window.addEventListener('pointerup', function () { if (S.dragVol) { S.dragVol = false; renderRoom(); } });
+  $('rpMembers').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.pm') : null;
+    if (!b || !Voice) return;
+    var id = b.getAttribute('data-vid');
+    Voice.setPersonMute(id, !Voice.person(id).mute);
+    renderRoom();
+  });
+  if (Voice) {
+    Voice.hooks.changed = renderRoom;
+    Voice.hooks.speaking = function (id, on) {                       // acende o aro de quem esta falando, sem refazer a lista
+      var li = document.querySelector('.rp-m[data-mid="' + id + '"]');
+      if (li) li.classList.toggle('speaking', on);
+      if (id === 'me') $('bMic').classList.toggle('speaking', on);
+    };
+  }
+
   $('roomHome').addEventListener('click', openRoomPanel);
   $('rpClose').addEventListener('click', closeRoomPanel);
   $('rpCreate').addEventListener('click', function () {
+    if (!ensureName()) return;
     roomMsg('Criando a sala…');
     Room.create(currentRoomState()).then(function () {
-      roomMsg('Sala criada. Passe o código para a outra pessoa.');
+      roomMsg('Sala criada. Passe o código para as outras pessoas.');
       renderRoom();
     }, function (err) { roomMsg(roomError(err)); });
   });
   $('rpJoinForm').addEventListener('submit', function (e) {
     e.preventDefault();
+    if (!ensureName()) return;
     roomMsg('Entrando…');
     Room.join($('rpCode').value).then(function () {
       roomMsg('');
@@ -297,8 +480,18 @@
   });
   $('rpLeave').addEventListener('click', function () { Room.leave(); renderRoom(); roomMsg('Você saiu da sala.'); });
   $('rpCopy').addEventListener('click', function () { copyText(Room.code()); });
-  $('rpCode').addEventListener('focus', function () { S.typing = true; toHost('typing:1'); refreshUi(); });
-  $('rpCode').addEventListener('blur', function () { S.typing = false; toHost('typing:0'); refreshUi(); });
+  ['rpCode', 'rpName', 'rpName2'].forEach(function (id) {
+    $(id).addEventListener('focus', function () { S.typing = true; toHost('typing:1'); refreshUi(); });
+    $(id).addEventListener('blur', function () { S.typing = false; toHost('typing:0'); refreshUi(); });
+  });
+  $('rpName').addEventListener('change', function () { Room.setName($('rpName').value); });
+  $('rpName2').addEventListener('change', function () {
+    var n = $('rpName2').value.replace(/\s+/g, ' ').trim();
+    if (!n) { $('rpName2').value = Room.name(); return; }
+    Room.setName(n);
+    $('rpName').value = Room.name();
+  });
+  $('rpName2').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('rpName2').blur(); });
 
   /* ---------- atualizacao automatica ---------- */
 
@@ -668,7 +861,7 @@
     }
   });
   document.addEventListener('paste', function (e) {
-    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput' || e.target.id === 'rpCode')) return;   // os campos cuidam do proprio colar
+    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput' || e.target.id === 'rpCode' || e.target.id === 'rpName' || e.target.id === 'rpName2')) return;   // os campos cuidam do proprio colar
     var t = e.clipboardData ? e.clipboardData.getData('text') : '';
     if (t) { e.preventDefault(); handleText(t); }
   });
