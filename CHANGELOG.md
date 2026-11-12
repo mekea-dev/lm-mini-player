@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## v1.3.1 - 2026-11-12
+
+- **Salas no ar.** O servidor de salas (Cloudflare, plano grátis) já está funcionando e o botão **Sala** (ícone de pessoas) aparece na barra de cima e na tela inicial. **Criar sala** mostra um código de 8 letras e números; quem tem o código usa **Entrar**. Quem põe, pausa, pula, muda a velocidade ou troca de vídeo, muda para todos, e cada pessoa toca o seu próprio vídeo (não é transmissão de tela). Pequenos atrasos são corrigidos sozinhos, mesmo com o relógio do computador adiantado ou atrasado. Esta versão chega sozinha a quem já tem a 1.3.0.
+- Correção nas salas: uma pausa, um play ou uma mudança de velocidade feita logo depois de a sala mudar (menos de 2 segundos) era ignorada e não chegava aos outros. Agora só o que a própria sala causou no vídeo é ignorado.
+
 ## v1.3.0 - 2026-11-12
 
 - **Atualização automática.** Ao abrir, o programa confere no GitHub se há uma versão nova. Se houver, baixa o arquivo, confere o SHA-256 que o próprio GitHub informa e mostra um aviso verde **"Nova versão X · Atualizar"** junto com a barra de cima. Um clique troca os arquivos, abre a versão nova e volta ao mesmo vídeo e minuto. Se você não clicar, a atualização é instalada sozinha na próxima vez que abrir o programa. Se a versão nova não abrir, tudo volta ao que era. Pasta sem permissão de escrita: o aviso vira **"Baixar"** e abre a página da versão. Para desligar, ponha `update=0` no `config.ini`. **Quem está na 1.2.0 ou antes precisa baixar esta versão uma vez; daí em diante é automático.**

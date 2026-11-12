@@ -44,7 +44,7 @@
   };
 
   // sala: o programa manda o estado da sala; aqui o <video> e posto igual e os gestos da pessoa sobem
-  var room = { on: false, state: null, offset: 0, ignoreUntil: 0, lastFix: 0, pending: false, seekTimer: 0 };
+  var room = { on: false, state: null, offset: 0, lastFix: 0, pending: false, seekTimer: 0, xPlay: 0, xPause: 0, xSeek: 0 };
 
   function round2(n) { return Math.round(n * 100) / 100; }
   function clamp(n) { return Math.min(MAX, Math.max(MIN, round2(n))); }
@@ -216,18 +216,24 @@
 
   function isVideoEvent(e) { return e && e.target && e.target.tagName === 'VIDEO'; }
 
+  // O que a SALA manda o video fazer (tocar, pausar, pular) gera eventos que nao sao gestos da pessoa. Cada ordem
+  // abre uma janelinha de 1,2 s SO para o evento do mesmo tipo: um gesto de outro tipo logo depois (pausar um
+  // segundo apos a sala dar play, por exemplo) conta e sobe para a sala.
+  function expectEvent(kind) { room['x' + kind] = Date.now() + 1200; }
+  function fromRoom(kind) { return Date.now() < room['x' + kind]; }
+
   // avisa a pagina do que a PESSOA fez (nao do que a sala mandou fazer)
   function emit(ev) {
-    if (!room.on || isAd() || Date.now() < room.ignoreUntil) return;
+    if (!room.on || isAd()) return;
     var v = video();
     if (!v) return;
     try { window.parent.postMessage({ lmmp: 1, type: 'rev', ev: ev, pos: v.currentTime, rate: v.playbackRate }, '*'); } catch (e) { /* ignora */ }
   }
 
-  document.addEventListener('play', function (e) { if (isVideoEvent(e)) emit('play'); }, true);
-  document.addEventListener('pause', function (e) { if (isVideoEvent(e) && !e.target.ended) emit('pause'); }, true);
+  document.addEventListener('play', function (e) { if (isVideoEvent(e) && !fromRoom('Play')) emit('play'); }, true);
+  document.addEventListener('pause', function (e) { if (isVideoEvent(e) && !e.target.ended && !fromRoom('Pause')) emit('pause'); }, true);
   document.addEventListener('seeked', function (e) {
-    if (!isVideoEvent(e)) return;
+    if (!isVideoEvent(e) || fromRoom('Seek')) return;
     clearTimeout(room.seekTimer);
     room.seekTimer = setTimeout(function () { emit('seek'); }, 300);   // arrastar a barra gera varios pulos: manda o ultimo
   }, true);
@@ -238,13 +244,12 @@
     if (!room.on || !v || isAd()) { room.pending = true; return; }
     room.pending = false;
     var exp = expected();
-    room.ignoreUntil = Date.now() + 2500;                              // o que fizermos agora nao e "gesto da pessoa"
-    if (Math.abs(v.currentTime - exp) > 0.7) { try { v.currentTime = exp; } catch (e) { /* ignora */ } }
+    if (Math.abs(v.currentTime - exp) > 0.7) { expectEvent('Seek'); try { v.currentTime = exp; } catch (e) { /* ignora */ } }
     st.desired = clamp(s.rate);
     applyToVideo(v, st.desired);
     report();
-    if (s.playing && v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () { /* autoplay barrado */ }); }
-    if (!s.playing && !v.paused) v.pause();
+    if (s.playing && v.paused) { expectEvent('Play'); var p = v.play(); if (p && p.catch) p.catch(function () { /* autoplay barrado */ }); }
+    if (!s.playing && !v.paused) { expectEvent('Pause'); v.pause(); }
   }
 
   function applyRoomMsg(d) {
@@ -271,7 +276,7 @@
     if (!v || v.paused || isAd()) return;
     if (Math.abs(expected() - v.currentTime) > 1.5 && Date.now() - room.lastFix > 6000) {
       room.lastFix = Date.now();
-      room.ignoreUntil = Date.now() + 2500;
+      expectEvent('Seek');
       try { v.currentTime = expected(); } catch (e) { /* ignora */ }
     }
   }, 2000);

@@ -4,6 +4,8 @@ As **salas** deixam várias pessoas assistirem o mesmo vídeo ao mesmo tempo: qu
 
 Para isso é preciso um pequeno servidor que guarda o *estado* de cada sala (qual vídeo, em que segundo, tocando ou pausado, velocidade). Este guia monta um **grátis** no Cloudflare (Workers + banco D1), pelo painel do site, sem instalar nada. Enquanto nenhum servidor estiver configurado, o botão de sala não aparece no programa.
 
+> **Quem só usa o programa não precisa fazer nada daqui:** o programa pronto (baixado em *Releases*) já vem ligado ao servidor do projeto original, configurado em [`web/config.js`](../web/config.js). Este guia é para quem faz um fork ou quer ter o próprio servidor.
+
 ## O que o servidor guarda
 
 Por sala: o código, o vídeo (ID do YouTube), a posição, se está tocando, a velocidade e uma lista de identificadores aleatórios de quem está na sala (um por janela aberta, gerado na hora, não fica guardado no computador e não tem nome, e-mail nem nada pessoal). Salas sem uso por 24 horas são apagadas. Como em qualquer servidor, o Cloudflare enxerga o endereço IP de quem se conecta.

@@ -20,7 +20,7 @@ $lib     = Join-Path $root 'lib'
 $exe     = Join-Path $root 'LMMiniPlayer.exe'
 $csc     = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $wv2     = '1.0.4314.35'     # versao do pacote Microsoft.Web.WebView2
-$version = '1.3.0'           # versao do programa (igual a AssemblyVersion em src\Program.cs)
+$version = '1.3.1'           # versao do programa (igual a AssemblyVersion em src\Program.cs)
 
 if (-not (Test-Path $csc)) { throw "Nao achei o compilador C# em $csc (precisa do .NET Framework 4)." }
 

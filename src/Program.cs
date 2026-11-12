@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.3.1.0")]
+[assembly: AssemblyFileVersion("1.3.1.0")]
 
 namespace LMMiniPlayer
 {

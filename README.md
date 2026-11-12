@@ -36,6 +36,7 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 | Trocar de vídeo | **Ctrl+V** de novo, o botão de colar da barra, ou **Ctrl+L** para pesquisar ou digitar o link |
 | Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: os resultados do YouTube aparecem dentro do programa e, ao clicar num vídeo, ele toca no player (com a velocidade livre e tudo mais). Link colado no campo toca direto. **Explorar YouTube** abre a página inicial do site |
 | Ouvir Spotify | Botão **Spotify** na tela de pesquisa (ou a aba **Spotify** na barra do modo navegação). Entre na sua conta uma vez: suas playlists e músicas curtidas aparecem. Ele continua tocando quando você volta ao player |
+| Ver o mesmo vídeo com outras pessoas | Botão **Sala** (ícone de pessoas, na barra e na tela inicial): **Criar sala** e passe o código de 8 letras e números; quem tem o código usa **Entrar**. Veja [Salas](#salas-assistir-junto) |
 | Mover | Arraste pela **barra** no canto de cima (ela aparece quando o mouse mexe sobre a janela; arrasta de qualquer ponto dela, menos dos botões) |
 | Redimensionar | Arraste **qualquer borda ou canto** (tamanho mínimo 240 × 135) |
 | Mudar a velocidade | **D** acelera e **S** desacelera (0,1× por toque; com **Shift**, 1×). **R** volta a 1× e, apertando de novo, à velocidade anterior. Vai de **0,07× a 16×** e fica lembrada. O selo na barra mostra o valor (clique nele para voltar a 1×) |
@@ -57,6 +58,21 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 - Para o Spotify (ou os resultados do YouTube) ficar maior, é só aumentar a janela: o site ocupa tudo abaixo da barra.
 - O **Ctrl+V e as teclas de velocidade valem quando a janela do mini player está em foco** (clique nela uma vez). Não são atalhos globais.
 
+## Salas (assistir junto)
+
+![A sala aberta, com o código para passar aos amigos](docs/sala.png)
+
+Com uma sala, **todo mundo vê o mesmo vídeo ao mesmo tempo**: quem põe, pausa, pula na barra, muda a velocidade ou cola outro link, muda para todos. **Cada pessoa toca o seu próprio vídeo do YouTube** (não é transmissão de tela nem de áudio); o programa só mantém todos no mesmo ponto.
+
+1. Uma pessoa abre o botão **Sala** e clica em **Criar sala** (se já estiver tocando algo, a sala nasce com esse vídeo). O programa mostra um código, por exemplo `K7MR4XQ2`, com o botão **Copiar código**.
+2. As outras pessoas abrem **Sala**, digitam o código e clicam em **Entrar**. Se a sala estiver em outro vídeo, o programa carrega o dela.
+3. **Sair da sala** volta ao normal.
+
+- Pequenos atrasos (internet, carregamento, anúncio) são corrigidos sozinhos. Cada um vê os **seus próprios anúncios**; depois do anúncio, o vídeo volta ao ponto da sala.
+- Dentro da sala a velocidade é **da sala** e não muda a sua velocidade preferida de fora dela.
+- Funciona para vídeos do YouTube (o Spotify toca à parte) e precisa de internet de todo mundo. Salas sem uso por 24 horas somem.
+- O servidor das salas é um pequeno serviço gratuito da Cloudflare que guarda só o estado da sala. Detalhes e como montar o seu próprio: [`relay/LEIA-ME.md`](relay/LEIA-ME.md).
+
 ## O que ele não faz
 
 - **Alguns vídeos não tocam fora do YouTube** (o dono bloqueou a reprodução incorporada, restrição de idade etc.). O programa avisa e oferece o botão *Abrir no YouTube*.
@@ -67,7 +83,8 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 
 ## Privacidade
 
-- Nenhuma conta, nenhum cadastro, nenhuma telemetria. O programa só conversa com o YouTube (player oficial e pesquisa), com o Spotify se você abrir o módulo e com o GitHub para ver se há versão nova.
+- Nenhuma conta, nenhum cadastro, nenhuma telemetria. O programa só conversa com o YouTube (player oficial e pesquisa), com o Spotify se você abrir o módulo, com o servidor de salas se você entrar numa sala e com o GitHub para ver se há versão nova.
+- **Salas:** só enquanto você está numa sala, o programa conversa com o servidor de salas (Cloudflare) e envia o código da sala, o ID do vídeo, a posição, se está tocando ou pausado, a velocidade e um identificador aleatório da janela (gerado na hora, não fica guardado no computador e não é você). Nada de nome, e-mail ou conta. O Cloudflare enxerga o seu endereço IP, como qualquer servidor. Fora de uma sala, nada disso é enviado.
 - **Verificação de versão:** ao abrir (e a cada 6 horas) o programa faz um pedido comum a `api.github.com` pelo último release, e baixa o `.zip` de `github.com/mekea-dev/lm-mini-player` se houver versão nova. O GitHub enxerga o seu endereço IP e o nome do programa, como em qualquer download; o programa não envia mais nada. Dá para desligar (`update=0`, veja acima).
 - Se você entrar na sua conta do YouTube ou do Spotify dentro do programa, o login fica no perfil local do programa (veja abaixo), como num navegador. O programa não guarda senhas.
 - Ao abrir **sem** link, ele olha a área de transferência uma vez para ver se há um link do YouTube. Nada é guardado nem enviado.
