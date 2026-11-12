@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>LM Mini Player</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="empty">
+
+<!-- Icones (traco simples, herdam a cor do texto) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="lg-logo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff6a5e"/>
+      <stop offset="1" stop-color="#d4202e"/>
+    </linearGradient>
+
+    <symbol id="i-logo" viewBox="0 0 64 64">
+      <rect x="2" y="7" width="60" height="42" rx="10" fill="url(#lg-logo)"/>
+      <path d="M26 20.5v15a1.5 1.5 0 0 0 2.25 1.3l13-7.5a1.5 1.5 0 0 0 0-2.6l-13-7.5A1.5 1.5 0 0 0 26 20.5z" fill="#fff"/>
+      <rect x="33" y="35" width="28" height="20" rx="5.5" fill="#14141b" stroke="#ff7b70" stroke-width="2"/>
+      <path d="M43 40.5v8a.8.8 0 0 0 1.2.7l6-4a.8.8 0 0 0 0-1.4l-6-4a.8.8 0 0 0-1.2.7z" fill="#fff"/>
+    </symbol>
+
+    <symbol id="i-grip" viewBox="0 0 24 24">
+      <g fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></g>
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 24 24">
+      <path d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12.4-7.4a1 1 0 0 0 0-1.72L8.5 3.74A1 1 0 0 0 7 4.6z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></g>
+    </symbol>
+    <symbol id="i-link" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></g>
+    </symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></g>
+    </symbol>
+    <symbol id="i-opacity" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></g>
+    </symbol>
+    <symbol id="i-min" viewBox="0 0 24 24">
+      <path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24">
+      <path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></g>
+    </symbol>
+    <symbol id="i-retry" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></g>
+    </symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></g>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- Video -->
+<div id="stage"></div>
+
+<!-- Tela de link (aparece vazia no inicio ou por cima do video com Ctrl+L) -->
+<main id="home" aria-label="Novo link">
+  <div class="home-in">
+    <div class="logo" aria-hidden="true"><svg><use href="#i-logo"/></svg></div>
+    <h1>Cole o link do YouTube</h1>
+    <form id="form" class="field" autocomplete="off">
+      <input id="url" type="text" inputmode="url" spellcheck="false" autocapitalize="off"
+             placeholder="https://www.youtube.com/watch?v=…" aria-label="Link do vídeo do YouTube">
+      <button type="submit" class="btn primary" id="go"><svg class="i"><use href="#i-play"/></svg><span>Reproduzir</span></button>
+    </form>
+    <div class="alt">
+      <button type="button" class="btn ghost" id="pasteHome"><svg class="i"><use href="#i-clip"/></svg><span>Colar da área de transferência</span></button>
+    </div>
+    <p class="tip">Dica: copie o link e aperte <kbd>Ctrl</kbd> + <kbd>V</kbd>. Ele toca na hora.</p>
+    <p class="tip tip2">Arraste pela barra de cima · redimensione por qualquer borda</p>
+  </div>
+</main>
+
+<!-- Erro de reproducao -->
+<section id="err" role="alert">
+  <div class="err-in">
+    <svg class="i big"><use href="#i-alert"/></svg>
+    <h2 id="errTitle"></h2>
+    <p id="errText"></p>
+    <div class="actions">
+      <button type="button" class="btn primary" id="errRetry"><svg class="i"><use href="#i-retry"/></svg><span>Tentar de novo</span></button>
+      <button type="button" class="btn" id="errOpen"><svg class="i"><use href="#i-ext"/></svg><span>Abrir no YouTube</span></button>
+      <button type="button" class="btn ghost" id="errNew"><svg class="i"><use href="#i-link"/></svg><span>Outro link</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- Barra de cima: aparece quando o mouse mexe sobre a janela -->
+<header id="bar" class="bar">
+  <div id="drag" class="drag" title="Arraste para mover a janela">
+    <svg class="i grip"><use href="#i-grip"/></svg>
+    <span id="ttl" class="ttl">LM Mini Player</span>
+  </div>
+  <button type="button" class="ib" id="bLink"  title="Novo link (Ctrl+L)" aria-label="Novo link"><svg class="i"><use href="#i-link"/></svg></button>
+  <button type="button" class="ib" id="bPaste" title="Colar link e reproduzir (Ctrl+V)" aria-label="Colar link e reproduzir"><svg class="i"><use href="#i-clip"/></svg></button>
+  <button type="button" class="ib" id="bOp"    title="Transparência da janela" aria-label="Transparência da janela"><svg class="i"><use href="#i-opacity"/></svg></button>
+  <button type="button" class="ib on" id="bPin" title="Sempre por cima das outras janelas" aria-label="Sempre por cima" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg></button>
+  <button type="button" class="ib" id="bMin"   title="Minimizar" aria-label="Minimizar"><svg class="i"><use href="#i-min"/></svg></button>
+  <button type="button" class="ib danger" id="bClose" title="Fechar" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
+</header>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- Alcas invisiveis para redimensionar a janela por qualquer borda ou canto -->
+<i class="rz n"  data-d="n"></i>
+<i class="rz s"  data-d="s"></i>
+<i class="rz w"  data-d="w"></i>
+<i class="rz e"  data-d="e"></i>
+<i class="rz nw" data-d="nw"></i>
+<i class="rz ne" data-d="ne"></i>
+<i class="rz sw" data-d="sw"></i>
+<i class="rz se" data-d="se"></i>
+
+<script src="link.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

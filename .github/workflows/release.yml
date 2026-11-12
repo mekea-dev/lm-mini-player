@@ -1,0 +1,31 @@
+name: Release
+
+# Ao enviar uma tag "v*" (por exemplo v1.0.1), o GitHub compila o programa e publica
+# o .zip na aba Releases. Nada de segredo: usa so o token que o proprio GitHub fornece.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Compilar e empacotar
+        shell: powershell
+        run: ./build.ps1 -Package
+
+      - name: Publicar o release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip=$(ls dist/LM-Mini-Player-*-win-x64.zip | head -n 1)
+          sha=$(sha256sum "$zip" | cut -d' ' -f1 | tr 'a-f' 'A-F')
+          sed -e "s/{{VERSION}}/${GITHUB_REF_NAME}/g" -e "s/{{SHA256}}/${sha}/g" .github/release-notes.md > notes.md
+          gh release create "$GITHUB_REF_NAME" "$zip" --title "LM Mini Player ${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes do leitor de links</title>
+<style>
+  body { font: 14px/1.5 "Segoe UI", system-ui, sans-serif; margin: 24px; background: #101014; color: #eee; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  #resumo { margin: 0 0 16px; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 4px 10px; border-bottom: 1px solid #2a2a33; vertical-align: top; }
+  td.in { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; max-width: 520px; }
+  .ok { color: #35d07f; }
+  .falha { color: #ff6b6b; font-weight: 700; }
+  tr.falha-linha { background: #2a1214; }
+</style>
+</head>
+<body>
+<h1>Leitor de links do YouTube</h1>
+<p id="resumo">rodando...</p>
+<table>
+  <thead><tr><th></th><th>Entrada</th><th>Esperado</th><th>Obtido</th></tr></thead>
+  <tbody id="corpo"></tbody>
+</table>
+
+<script src="../web/link.js"></script>
+<script>
+(function () {
+  var ID = 'dQw4w9WgXcQ';
+  var LST = 'PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI';
+
+  // [entrada, esperado]   esperado = null (invalido) ou {id, list, start, index}
+  function v(id, list, start, index) { return { id: id, list: list || null, start: start || 0, index: index || 0 }; }
+
+  var casos = [
+    ['https://www.youtube.com/watch?v=' + ID, v(ID)],
+    ['https://youtu.be/' + ID, v(ID)],
+    ['https://youtu.be/' + ID + '?si=AbCdEf123&t=43', v(ID, null, 43)],
+    ['https://www.youtube.com/watch?v=' + ID + '&t=1m30s', v(ID, null, 90)],
+    ['https://www.youtube.com/watch?v=' + ID + '&t=1h2m3s', v(ID, null, 3723)],
+    ['https://www.youtube.com/watch?v=' + ID + '&t=90', v(ID, null, 90)],
+    ['https://www.youtube.com/watch?v=' + ID + '&t=2m30', v(ID, null, 150)],
+    ['https://www.youtube.com/watch?v=' + ID + '#t=15', v(ID, null, 15)],
+    ['https://m.youtube.com/watch?v=' + ID + '&feature=share', v(ID)],
+    ['https://music.youtube.com/watch?v=' + ID + '&si=xyz', v(ID)],
+    ['https://www.youtube.com/watch?feature=share&v=' + ID, v(ID)],
+    ['http://youtube.com/watch?v=' + ID, v(ID)],
+    ['https://www.youtube.com/shorts/aqz-KE-bpKQ', v('aqz-KE-bpKQ')],
+    ['https://www.youtube.com/live/jfKfPfyJRdk?si=x', v('jfKfPfyJRdk')],
+    ['https://www.youtube.com/embed/' + ID, v(ID)],
+    ['https://www.youtube-nocookie.com/embed/' + ID + '?start=20', v(ID, null, 20)],
+    ['youtu.be/' + ID, v(ID)],
+    ['www.youtube.com/watch?v=' + ID, v(ID)],
+    [ID, v(ID)],
+    ['   https://youtu.be/' + ID + '   ', v(ID)],
+    ['Olha esse video https://youtu.be/' + ID + ' muito bom', v(ID)],
+    ['(https://youtu.be/' + ID + ').', v(ID)],
+    ['https://www.youtube.com/playlist?list=' + LST, v(null, LST)],
+    ['https://www.youtube.com/watch?v=' + ID + '&list=' + LST + '&index=3', v(ID, LST, 0, 3)],
+    ['https://www.youtube.com/embed/videoseries?list=' + LST, v(null, LST)],
+    ['https://www.youtube.com/watch?v=' + ID + '&list=RD' + ID + '&start_radio=1', v(ID)],
+    ['https://www.youtube.com/watch?v=' + ID + '&list=WL', v(ID)],
+    ['https://www.youtube.com/attribution_link?a=xyz&u=/watch%3Fv%3D' + ID + '%26feature%3Dshare', v(ID)],
+
+    // invalidos
+    ['', null],
+    ['     ', null],
+    ['oi tudo bem', null],
+    ['https://example.com/watch?v=' + ID, null],
+    ['https://notyoutube.com/watch?v=' + ID, null],
+    ['https://youtube.com.evil.com/watch?v=' + ID, null],
+    ['https://www.youtube.com/', null],
+    ['https://www.youtube.com/@canal', null],
+    ['https://www.youtube.com/watch?v=curto', null],
+    ['https://www.youtube.com/watch', null],
+    ['https://www.youtube.com/playlist?list=WL', null],
+    ['https://vimeo.com/123456789', null],
+    ['javascript:alert(1)', null],
+    ['ftp://youtube.com/watch?v=' + ID, null],
+    ['https://www.youtube.com/attribution_link?u=https://evil.com', null]
+  ];
+
+  var corpo = document.getElementById('corpo');
+  var ok = 0;
+
+  function fmt(o) {
+    if (!o) return 'invalido (null)';
+    return 'id=' + o.id + ' list=' + o.list + ' start=' + o.start + ' index=' + o.index;
+  }
+
+  casos.forEach(function (c) {
+    var r = LMLink.parse(c[0]);
+    var want = c[1];
+    var bate;
+    if (want === null) bate = r === null;
+    else bate = !!r && r.id === want.id && r.list === want.list && r.start === want.start && r.index === want.index;
+    if (bate) ok++;
+
+    var tr = document.createElement('tr');
+    if (!bate) tr.className = 'falha-linha';
+    tr.innerHTML = '<td class="' + (bate ? 'ok' : 'falha') + '">' + (bate ? 'OK' : 'FALHOU') + '</td>' +
+      '<td class="in"></td><td></td><td></td>';
+    tr.children[1].textContent = JSON.stringify(c[0]);
+    tr.children[2].textContent = want === null ? 'invalido (null)' : fmt(want);
+    tr.children[3].textContent = fmt(r);
+    corpo.appendChild(tr);
+  });
+
+  var resumo = document.getElementById('resumo');
+  resumo.textContent = ok + ' de ' + casos.length + ' casos OK';
+  resumo.className = ok === casos.length ? 'ok' : 'falha';
+  document.title = (ok === casos.length ? 'OK ' : 'FALHOU ') + ok + '/' + casos.length + ' - testes do leitor de links';
+})();
+</script>
+</body>
+</html>

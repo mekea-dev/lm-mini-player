@@ -1,0 +1,14 @@
+# Gerado pela compilacao (build.ps1)
+/LMMiniPlayer.exe
+/*.dll
+/lib/
+/dist/
+*.pdb
+
+# Atalhos locais (guardam caminhos da sua maquina)
+*.lnk
+
+# Sistema / editor
+Thumbs.db
+Desktop.ini
+.vs/
