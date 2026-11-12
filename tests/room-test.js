@@ -51,9 +51,9 @@ const factory = (function () {
 })();
 const mod = factory(DurableObject, WebSocketPair, WebSocketRequestResponsePair, FakeResponse);
 
-async function newRoom(store, alarm) {
+async function newRoom(store, alarm, env) {
   const ctx = makeCtx(store || new Map(), alarm || {});
-  const room = new mod.Room(ctx, {});
+  const room = new mod.Room(ctx, env || { GRACE_MS: 0 });
   await ctx.block;
   return { room: room, ctx: ctx };
 }
@@ -200,6 +200,31 @@ dup2.ws.readyState = 3;
 await room.webSocketError(dup2.ws, new Error('rede'));
 check('erro na conexao tambem conta como sair', a.ws.last('leave') && a.ws.last('leave').id === C, a.ws.last('leave'));
 
+// ---- rede que cai e volta (prazo de 5 s antes de dizer que a pessoa saiu) ----
+const gr = await newRoom(new Map(), {}, { GRACE_MS: 60 });
+const g1 = await connect(gr.room, A, 'Ana', true);
+const g2 = await connect(gr.room, B, 'Bia', false);
+g1.ws.readyState = 3;
+await gr.room.webSocketClose(g1.ws, 1006, '', false);
+check('rede caiu (1006): os outros NAO veem "leave" na hora', !g2.ws.last('leave'), g2.ws.sent.slice(-1));
+await new Promise(function (res) { setTimeout(res, 140); });
+check('...mas veem "leave" depois do prazo se a pessoa nao voltar', g2.ws.last('leave') && g2.ws.last('leave').id === A, g2.ws.sent.slice(-1));
+const gr2 = await newRoom(new Map(), {}, { GRACE_MS: 90 });
+const q1 = await connect(gr2.room, A, 'Ana', true);
+const q2 = await connect(gr2.room, B, 'Bia', false);
+const joinsBefore = q2.ws.all('join').length, leavesBefore = q2.ws.all('leave').length;
+q1.ws.readyState = 3;
+await gr2.room.webSocketClose(q1.ws, 1006, '', false);
+const q1b = await connect(gr2.room, A, 'Ana', false);
+await new Promise(function (res) { setTimeout(res, 200); });
+check('voltou dentro do prazo: ninguem recebe "leave" nem "join"', q2.ws.all('leave').length === leavesBefore && q2.ws.all('join').length === joinsBefore, q2.ws.sent);
+check('...e o hello de quem voltou lista todo mundo', q1b.ws.last('hello') && q1b.ws.last('hello').members.length === 2, q1b.ws.last('hello'));
+const gr3 = await newRoom(new Map(), {}, { GRACE_MS: 60 });
+const k1 = await connect(gr3.room, A, 'Ana', true);
+const k2 = await connect(gr3.room, B, 'Bia', false);
+k1.ws.readyState = 3;
+await gr3.room.webSocketClose(k1.ws, 1000, '', true);
+check('fechamento limpo (1000): "leave" na hora, sem prazo', k2.ws.last('leave') && k2.ws.last('leave').id === A, k2.ws.sent.slice(-1));
 // ---- sala cheia ----
 const full = await newRoom();
 const ids = [];

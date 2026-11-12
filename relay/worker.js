@@ -35,6 +35,7 @@ const MAX_NAME = 24;
 const LEGACY_ACTIVE_MS = 30000;                // programa antigo "esta na sala" = apareceu nos ultimos 30 s
 const RATE_WINDOW_MS = 10000;
 const RATE_MAX = 400;                          // mensagens por janela, por conexao
+const GRACE_MS = 5000;                         // rede que caiu (fechamento anormal): espera um pouco antes de dizer que a pessoa saiu
 const APP_ORIGIN = 'https://lmminiplayer.app';
 
 const CORS = {
@@ -108,6 +109,7 @@ export class Room extends DurableObject {
     this.data = null;                 // { v, state, created, updated }; null = a sala nao existe
     this.legacy = new Map();          // programas antigos (HTTP): id -> ultima vez visto
     this.rate = new WeakMap();        // conexao -> { n, t }
+    this.grace = new Map();           // id -> temporizador: pessoa cuja conexao caiu e ainda pode voltar
     ctx.blockConcurrencyWhile(async () => { this.data = (await ctx.storage.get('room')) || null; });
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));   // "estou aqui" sem acordar a sala
   }
@@ -193,6 +195,8 @@ export class Room extends DurableObject {
     const others = this.open().filter(function (s) { const a = s.deserializeAttachment(); return s !== server && a && a.id !== id; });
     if (others.length >= MAX_MEMBERS) return refuse(4413, 'room_full');
 
+    const back = this.grace.has(id);              // voltou logo depois de a rede cair: os outros nem chegaram a ver ela sair
+    if (back) { clearTimeout(this.grace.get(id)); this.grace.delete(id); }
     const me = { id: id, name: cleanName(url.searchParams.get('name')), voice: false, muted: false, at: Date.now() };
     server.serializeAttachment(me);
     this.data.updated = me.at;
@@ -202,7 +206,7 @@ export class Room extends DurableObject {
       t: 'hello', now: Date.now(), you: id, v: this.data.v, state: this.data.state,
       members: others.map(function (s) { return pub(s.deserializeAttachment()); }).concat([pub(me)])
     }));
-    this.broadcast({ t: 'join', m: pub(me) }, server);
+    if (!back) this.broadcast({ t: 'join', m: pub(me) }, server);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -261,6 +265,16 @@ export class Room extends DurableObject {
       if (s === ws) continue;
       const a = s.deserializeAttachment();
       if (a && a.id === me.id) return;
+    }
+    const wait = this.env && this.env.GRACE_MS !== undefined ? Number(this.env.GRACE_MS) : GRACE_MS;
+    if (code === 1006 && wait > 0) {                    // queda de rede: se voltar dentro do prazo, ninguem percebe
+      clearTimeout(this.grace.get(me.id));
+      this.grace.set(me.id, setTimeout(() => {
+        this.grace.delete(me.id);
+        const still = this.open().some(function (s) { const a = s.deserializeAttachment(); return a && a.id === me.id; });
+        if (!still) this.broadcast({ t: 'leave', id: me.id });
+      }, wait));
+      return;
     }
     this.broadcast({ t: 'leave', id: me.id }, ws);
   }
