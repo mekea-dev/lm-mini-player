@@ -12,23 +12,19 @@
 </head>
 <body>
 <h1>Teste do servidor de salas (<code>relay/worker.js</code>)</h1>
-<p>Roda o código <b>real</b> do Worker contra um SQLite de verdade. Antes, em dois terminais, na pasta do projeto:<br>
-<code>python tests/d1-shim.py 8802</code> (o "D1 falso") e <code>python -m http.server 8000</code>; depois abra
-<code>http://localhost:8000/tests/worker-test.html</code>. Cada abertura precisa de um <code>d1-shim.py</code> novo (as salas ficam na memória dele).</p>
+<p>Roda o código <b>real</b> do Worker e do Durable Object com um ambiente de mentira (tudo na memória, sem rede). Na pasta do projeto:
+<code>python -m http.server 8000</code>; depois abra <code>http://localhost:8000/tests/room-test.html</code>.</p>
 <h2 id="resumo">rodando…</h2>
 <ul id="lista"></ul>
 <script>
 (async function () {
-  var SHIM = 'http://127.0.0.1:8802';
   var resumo = document.getElementById('resumo');
   var lista = document.getElementById('lista');
   try {
-    var workerSrc = await (await fetch('../relay/worker.js')).text();
-    var testSrc = await (await fetch('worker-test.js')).text();
-    // o Worker e um modulo ("export default"); aqui vira uma funcao que devolve o objeto
-    var W = (new Function(workerSrc.replace('export default {', 'return {')))();
+    var src = await (await fetch('../relay/worker.js')).text();
+    var testSrc = await (await fetch('room-test.js')).text();
     var AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    var rep = JSON.parse(await new AsyncFunction('W', 'SHIM', testSrc)(W, SHIM));
+    var rep = JSON.parse(await new AsyncFunction('SRC', testSrc)(src));
     rep.results.forEach(function (r) {
       var li = document.createElement('li');
       li.className = r.ok ? 'ok' : 'bad';
@@ -40,9 +36,10 @@
     resumo.className = rep.failed ? 'bad' : 'ok';
     document.title = resumo.textContent;
   } catch (e) {
-    resumo.textContent = 'ERRO: ' + e.message + ' (o d1-shim.py esta rodando na porta 8802?)';
+    resumo.textContent = 'ERRO: ' + e.message;
     resumo.className = 'bad';
     document.title = 'ERRO';
+    var pre = document.createElement('pre'); pre.textContent = e.stack; document.body.appendChild(pre);
   }
 })();
 </script>

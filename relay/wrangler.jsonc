@@ -1,0 +1,13 @@
+{
+  // Configuracao do servidor de salas (Cloudflare Worker + Durable Object).
+  // O Cloudflare le este arquivo quando o repositorio e ligado ao Worker (Workers Builds, "Git").
+  "name": "lm-salas",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-12",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] }
+  ]
+}
