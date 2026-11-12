@@ -7,6 +7,7 @@
 //
 // Compila com o csc.exe que ja vem no Windows (C# 5): veja build.ps1.
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
@@ -22,8 +23,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace LMMiniPlayer
 {
@@ -153,6 +154,19 @@ namespace LMMiniPlayer
         }
     }
 
+    // janela de navegacao que fica por baixo da barra do programa (busca do YouTube, Spotify...)
+    sealed class BrowseModule
+    {
+        public string Name;
+        public string HomeUrl;
+        public bool Muted;                      // sem som: a busca do YouTube so serve para escolher, quem toca e o nosso player
+        public string[] AllowedHosts;           // dominios permitidos na janela principal do modulo (o resto abre no navegador)
+        public string ScriptFile;               // script injetado nas paginas do modulo (opcional), dentro de web\
+        public Task CreateTask;
+        public CoreWebView2Controller Controller;
+        public CoreWebView2 Core;
+    }
+
     sealed class MainForm : Form
     {
         const string VHost = "lmminiplayer.app";                       // nome virtual: aponta para a pasta web\
@@ -180,6 +194,16 @@ namespace LMMiniPlayer
 
         bool fullscreen;
         Rectangle boundsBeforeFull;
+
+        // modulos: um WebView2 a mais por modulo, criado so quando usado, por baixo da barra do programa
+        const int BrowseBarDip = 44;                                   // altura da barra de busca (igual a --browse-h em app.css)
+        const int BrowseEdgeDip = 6;                                   // margem para as alcas de redimensionar (igual a --rz)
+        static readonly Regex WatchUrl = new Regex(@"^https://(m|www|music)\.youtube\.com/(watch\?|shorts/|live/)", RegexOptions.IgnoreCase);
+        readonly Dictionary<string, BrowseModule> modules = new Dictionary<string, BrowseModule>();
+        BrowseModule activeModule;
+        CoreWebView2Environment env;
+        string webDir;
+        int modSeq;                                                    // descarta pedidos de modulo que chegam atrasados
 
         public MainForm(string[] args)
         {
@@ -209,9 +233,10 @@ namespace LMMiniPlayer
             SizeChanged += delegate { FitController(); };
             Activated += delegate
             {
-                if (controller != null)
+                CoreWebView2Controller c = (activeModule != null && activeModule.Controller != null) ? activeModule.Controller : controller;
+                if (c != null)
                 {
-                    try { controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); } catch { }
+                    try { c.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); } catch { }
                 }
             };
         }
@@ -274,6 +299,10 @@ namespace LMMiniPlayer
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            foreach (BrowseModule o in modules.Values)
+            {
+                if (o.Controller != null) { try { o.Controller.Close(); } catch { } o.Controller = null; }
+            }
             if (controller != null)
             {
                 try { controller.Close(); } catch { }
@@ -350,6 +379,11 @@ namespace LMMiniPlayer
             {
                 controller.Bounds = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
                 controller.IsVisible = true;
+                if (activeModule != null && activeModule.Controller != null)
+                {
+                    activeModule.Controller.Bounds = ModuleBounds();
+                    activeModule.Controller.IsVisible = true;
+                }
             }
             catch { }
         }
@@ -358,7 +392,7 @@ namespace LMMiniPlayer
 
         async Task InitWebView()
         {
-            string webDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web");
+            webDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web");
             if (!File.Exists(Path.Combine(webDir, "index.html")))
                 throw new FileNotFoundException("A pasta \"web\" precisa ficar ao lado do LMMiniPlayer.exe.");
 
@@ -366,8 +400,26 @@ namespace LMMiniPlayer
             // sem isso o Chromium bloqueia o play automatico quando o video e colado por fora da pagina
             options.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
 
-            CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(
+            env = await CoreWebView2Environment.CreateAsync(
                 null, Path.Combine(AppPaths.DataDir, "WebView2"), options);
+
+            // modulos de navegacao (so sao criados quando o usuario abre um deles)
+            modules["youtube"] = new BrowseModule
+            {
+                Name = "youtube",
+                HomeUrl = "https://m.youtube.com/",
+                Muted = true,
+                ScriptFile = "yt-browse.js",
+                AllowedHosts = new string[] { "youtube.com", "google.com", "gstatic.com" }
+            };
+            modules["spotify"] = new BrowseModule
+            {
+                Name = "spotify",
+                HomeUrl = "https://open.spotify.com/",
+                Muted = false,
+                AllowedHosts = new string[] { "spotify.com", "scdn.co", "spotifycdn.com", "google.com", "gstatic.com", "facebook.com", "apple.com" }
+            };
+
             controller = await env.CreateCoreWebView2ControllerAsync(Handle);
             core = controller.CoreWebView2;
 
@@ -456,6 +508,19 @@ namespace LMMiniPlayer
                 case "paste": Send("url:" + ReadClipboard()); break;
                 case "typing": typing = arg == "1"; break;
                 case "open": OpenExternal(arg); break;
+                case "mod":                                                 // abre um modulo (youtube, spotify) ou volta ao player
+                    if (arg == "player") HideModules(); else RunModule(arg, null);
+                    break;
+                case "search":                                              // pesquisa no YouTube
+                    if (arg.Length > 0 && arg.Length <= 300)
+                        RunModule("youtube", "https://m.youtube.com/results?search_query=" + Uri.EscapeDataString(arg));
+                    break;
+                case "modhome":
+                    if (activeModule != null && activeModule.Core != null)
+                    {
+                        try { activeModule.Core.Navigate(activeModule.HomeUrl); } catch { }
+                    }
+                    break;
             }
         }
 
@@ -475,6 +540,173 @@ namespace LMMiniPlayer
             else if (e.VirtualKey == 0x4C)                                  // L
             {
                 e.Handled = true;
+                Send("link");
+            }
+        }
+
+        // ---------- modulos: busca do YouTube e Spotify (janela por baixo da barra) ----------
+
+        float CurrentScale()
+        {
+            try { using (Graphics g = Graphics.FromHwnd(Handle)) return g.DpiX / 96f; }
+            catch { return DpiScale(); }
+        }
+
+        Rectangle ModuleBounds()
+        {
+            float s = CurrentScale();
+            int edge = (int)Math.Round(BrowseEdgeDip * s);
+            int top = (int)Math.Round(BrowseBarDip * s);
+            return new Rectangle(edge, top, Math.Max(1, ClientSize.Width - 2 * edge), Math.Max(1, ClientSize.Height - top - edge));
+        }
+
+        async void RunModule(string name, string url)
+        {
+            try { await ShowModule(name, url); }
+            catch (Exception ex) { AppLog.Error(ex); Send("modfail:" + name); }
+        }
+
+        async Task ShowModule(string name, string url)
+        {
+            BrowseModule m;
+            if (!modules.TryGetValue(name, out m)) return;
+            int my = ++modSeq;
+            if (m.Controller == null)
+            {
+                if (m.CreateTask == null) m.CreateTask = CreateModule(m);
+                await m.CreateTask;
+                if (my != modSeq) return;                  // o usuario ja voltou ao player ou escolheu outro modulo
+            }
+            foreach (BrowseModule o in modules.Values)
+                if (o != m && o.Controller != null) o.Controller.IsVisible = false;
+            activeModule = m;
+            FitController();
+            if (url != null) m.Core.Navigate(url);
+            else if (string.IsNullOrEmpty(m.Core.Source) || m.Core.Source == "about:blank") m.Core.Navigate(m.HomeUrl);
+            try { m.Controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); } catch { }
+            Send("mod:" + m.Name);
+        }
+
+        void HideModules()
+        {
+            modSeq++;
+            foreach (BrowseModule o in modules.Values)
+            {
+                if (o.Controller != null) { try { o.Controller.IsVisible = false; } catch { } }
+            }
+            activeModule = null;
+            FitController();
+            if (controller != null) { try { controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); } catch { } }
+            Send("mod:player");
+        }
+
+        async Task CreateModule(BrowseModule m)
+        {
+            CoreWebView2Controller c = await env.CreateCoreWebView2ControllerAsync(Handle);
+            CoreWebView2 w = c.CoreWebView2;
+            c.DefaultBackgroundColor = Color.FromArgb(14, 14, 20);
+            c.IsVisible = false;
+            c.Bounds = ModuleBounds();
+
+            CoreWebView2Settings st = w.Settings;
+            st.AreDefaultContextMenusEnabled = false;
+            st.AreDevToolsEnabled = false;
+            st.IsStatusBarEnabled = false;
+            st.IsZoomControlEnabled = false;
+            st.IsPasswordAutosaveEnabled = false;          // o programa nao guarda senha nenhuma
+            st.IsGeneralAutofillEnabled = false;
+            try { w.IsMuted = m.Muted; } catch { }
+
+            if (!string.IsNullOrEmpty(m.ScriptFile))
+            {
+                string path = Path.Combine(webDir, m.ScriptFile);
+                if (File.Exists(path))
+                {
+                    try { await w.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(path, System.Text.Encoding.UTF8)); }
+                    catch (Exception ex) { AppLog.Error(ex); }
+                }
+            }
+
+            w.WebMessageReceived += delegate(object s, CoreWebView2WebMessageReceivedEventArgs e) { OnModuleMessage(m, e); };
+            w.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+            {
+                if (!HostAllowed(m, e.Uri)) { e.Cancel = true; OpenExternal(e.Uri); }
+            };
+            w.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
+            {
+                e.Handled = true;
+                if (m.Name == "youtube" && WatchUrl.IsMatch(e.Uri)) PlayFromModule(e.Uri); else OpenExternal(e.Uri);
+            };
+            w.SourceChanged += delegate { OnModuleSourceChanged(m); };
+            w.DocumentTitleChanged += delegate { if (m == activeModule) Send("modtitle:" + w.DocumentTitle); };
+            w.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e) { e.State = CoreWebView2PermissionState.Deny; };
+            w.ProcessFailed += delegate(object s, CoreWebView2ProcessFailedEventArgs e)
+            {
+                if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited ||
+                    e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
+                {
+                    try { w.Reload(); } catch { }
+                }
+            };
+            c.AcceleratorKeyPressed += OnModuleAccelerator;
+
+            m.Core = w;
+            m.Controller = c;
+        }
+
+        // so https e so os dominios do modulo na janela principal; o resto abre no navegador padrao
+        static bool HostAllowed(BrowseModule m, string uri)
+        {
+            if (string.Equals(uri, "about:blank", StringComparison.OrdinalIgnoreCase)) return true;
+            Uri u;
+            if (!Uri.TryCreate(uri, UriKind.Absolute, out u)) return false;
+            if (u.Scheme != Uri.UriSchemeHttps) return false;
+            string h = u.Host.ToLowerInvariant();
+            foreach (string s in m.AllowedHosts)
+            {
+                if (h == s || h.EndsWith("." + s)) return true;
+            }
+            return false;
+        }
+
+        // a busca do YouTube manda "lmmp-play:<link>" quando o usuario clica num video (script yt-browse.js)
+        void OnModuleMessage(BrowseModule m, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            if (m.Name != "youtube" || !HostAllowed(m, e.Source ?? "")) return;
+            string msg;
+            try { msg = e.TryGetWebMessageAsString(); } catch { return; }
+            if (msg != null && msg.StartsWith("lmmp-play:", StringComparison.Ordinal)) PlayFromModule(msg.Substring(10));
+        }
+
+        // o link escolhido na busca toca no NOSSO player (com velocidade livre, atalhos etc.)
+        void PlayFromModule(string url)
+        {
+            if (url == null || url.Length > 600 || !WatchUrl.IsMatch(url)) return;
+            HideModules();
+            Send("url:" + url);
+        }
+
+        // rede de seguranca: se o site abriu o video sozinho (clique que o script nao pegou), para ali e toca no nosso player
+        void OnModuleSourceChanged(BrowseModule m)
+        {
+            if (m.Name != "youtube" || m.Core == null) return;
+            string src = m.Core.Source ?? "";
+            if (!WatchUrl.IsMatch(src)) return;
+            try { m.Core.ExecuteScriptAsync("document.querySelectorAll('video').forEach(function (v) { v.pause(); })"); } catch { }
+            try { if (m.Core.CanGoBack) m.Core.GoBack(); } catch { }
+            PlayFromModule(src);
+        }
+
+        // Ctrl+L dentro de um modulo leva para a barra de busca do programa
+        void OnModuleAccelerator(object sender, CoreWebView2AcceleratorKeyPressedEventArgs e)
+        {
+            if (e.KeyEventKind != CoreWebView2KeyEventKind.KeyDown) return;
+            if ((Native.GetAsyncKeyState(0x11) & 0x8000) == 0) return;      // Ctrl
+            if ((Native.GetAsyncKeyState(0x12) & 0x8000) != 0) return;      // Alt/AltGr: nao mexe
+            if (e.VirtualKey == 0x4C)                                       // L
+            {
+                e.Handled = true;
+                try { controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); } catch { }
                 Send("link");
             }
         }

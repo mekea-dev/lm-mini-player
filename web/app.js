@@ -5,7 +5,9 @@
  * Conversa com o programa (C#) por mensagens de texto "comando:argumento":
  *   pagina -> programa:  ready | drag | size:<borda> | min | close | pin:0/1 | op:0.85
  *                        paste | typing:0/1 | open:<url>
+ *                        mod:<player|youtube|spotify> | search:<texto> | modhome
  *   programa -> pagina:  cfg:pin=1;op=1 | url:<texto> | link | ui:0/1 | dragend
+ *                        mod:<modulo> | modtitle:<texto> | modfail:<modulo>
  */
 (function () {
   'use strict';
@@ -37,6 +39,7 @@
     pin: true,
     opacity: 1,
     rate: 1,            // velocidade do video (vem do player por mensagem)
+    mode: 'player',     // 'player' | 'youtube' (busca) | 'spotify'
     toastTimer: 0,
     muteOnReady: false  // so para testes automaticos (abre o video mudo)
   };
@@ -58,7 +61,14 @@
     } else if (cmd === 'url') {
       handleText(arg);
     } else if (cmd === 'link') {
-      openHome();
+      openOmnibox();
+    } else if (cmd === 'mod') {
+      setMode(arg);
+    } else if (cmd === 'modtitle') {
+      $('modTitle').textContent = arg;
+    } else if (cmd === 'modfail') {
+      setMode('player');
+      toast('Não foi possível abrir este módulo');
     } else if (cmd === 'ui') {
       S.hostActive = arg === '1';
       if (!S.hostActive && !$('bar').matches(':hover')) S.barHover = false;
@@ -88,7 +98,8 @@
   /* ---------- pequenas utilidades de tela ---------- */
 
   function refreshUi() {
-    var always = body.classList.contains('empty') || body.classList.contains('home') || body.classList.contains('err');
+    var always = body.classList.contains('empty') || body.classList.contains('home') ||
+      body.classList.contains('err') || body.classList.contains('browse');
     body.classList.toggle('ui', always || S.hostActive || S.barHover || S.typing);
     renderRate();
   }
@@ -115,6 +126,10 @@
     b.title = S.pin
       ? 'Sempre por cima: ligado (clique para desligar)'
       : 'Sempre por cima: desligado (clique para ligar)';
+    var m = $('mPin');                               // o mesmo botao na barra do modo navegacao
+    m.classList.toggle('on', S.pin);
+    m.setAttribute('aria-pressed', S.pin ? 'true' : 'false');
+    m.title = b.title;
   }
 
   function renderOpacity() {
@@ -144,7 +159,7 @@
   function focusPlayer() {
     try {
       var f = S.player && S.player.getIframe && S.player.getIframe();
-      if (f && !body.classList.contains('home')) f.focus();
+      if (f && S.mode === 'player' && !body.classList.contains('home')) f.focus();
     } catch (err) { /* ignora */ }
   }
 
@@ -171,6 +186,54 @@
     refreshUi();
   }
 
+  /* ---------- modulos: busca do YouTube e Spotify ---------- */
+
+  // mostra o modo certo (a janela do site fica por conta do programa, por baixo da barra)
+  function setMode(name) {
+    if (name !== 'youtube' && name !== 'spotify') name = 'player';
+    S.mode = name;
+    body.classList.toggle('browse', name !== 'player');
+    body.classList.toggle('mod-youtube', name === 'youtube');
+    body.classList.toggle('mod-spotify', name === 'spotify');
+    $('tabYoutube').classList.toggle('on', name === 'youtube');
+    $('tabSpotify').classList.toggle('on', name === 'spotify');
+    if (name !== 'player') { body.classList.remove('home'); clearError(); }
+    if (name !== 'spotify') $('modTitle').textContent = '';
+    refreshUi();
+  }
+
+  function openModule(name) {
+    if (S.mode === name) return;
+    setMode(name);
+    toHost('mod:' + name);
+  }
+
+  function backToPlayer() {
+    if (S.mode === 'player') return;
+    setMode('player');
+    toHost('mod:player');
+    if (S.current) setTimeout(focusPlayer, 60);
+  }
+
+  // Ctrl+L: no player abre a tela de pesquisa/link; no modo navegacao vai para o campo de busca
+  function openOmnibox() {
+    if (S.mode === 'player') { openHome(); return; }
+    if (S.mode !== 'youtube') openModule('youtube');
+    setTimeout(function () { var u = $('searchInput'); u.focus(); u.select(); }, 20);
+  }
+
+  // o que foi digitado: link do YouTube toca; qualquer outro texto vira pesquisa no YouTube
+  function submitOmni(text) {
+    var info = window.LMLink.parse(text);
+    if (info) { play(info); return true; }
+    text = (text || '').trim();
+    if (!text) { toast('Digite um link ou o que quer pesquisar'); return false; }
+    $('searchInput').value = text;
+    setMode('youtube');
+    toHost('search:' + text);
+    return true;
+  }
+
   function handleText(text) {
     var info = window.LMLink.parse(text);
     if (!info) {
@@ -193,7 +256,9 @@
   function play(info) {
     S.current = info;
     clearError();
+    if (S.mode !== 'player') { setMode('player'); toHost('mod:player'); }   // tocou um link: sai da busca
     $('url').value = '';
+    $('goText').textContent = 'Reproduzir';
     body.classList.remove('empty', 'home');
     body.classList.add('playing');
     setTitle('Carregando…');
@@ -364,14 +429,37 @@
   // tela de link
   $('form').addEventListener('submit', function (e) {
     e.preventDefault();
-    if (!handleText($('url').value)) { $('url').focus(); $('url').select(); }
+    if (!submitOmni($('url').value)) { $('url').focus(); $('url').select(); }
   });
   $('url').addEventListener('paste', function () {
-    setTimeout(function () { var v = $('url').value; if (v.trim()) handleText(v); }, 0);
+    // colou um link: toca na hora; colou outro texto: espera o Enter para pesquisar
+    setTimeout(function () { var v = $('url').value; if (v.trim() && window.LMLink.parse(v)) submitOmni(v); }, 0);
+  });
+  $('url').addEventListener('input', function () {
+    var v = $('url').value.trim();
+    $('goText').textContent = (!v || window.LMLink.parse(v)) ? 'Reproduzir' : 'Buscar';
   });
   $('url').addEventListener('focus', function () { S.typing = true; toHost('typing:1'); refreshUi(); });
   $('url').addEventListener('blur', function () { S.typing = false; toHost('typing:0'); refreshUi(); });
   $('pasteHome').addEventListener('click', pasteFromClipboard);
+  $('modYoutube').addEventListener('click', function () { openModule('youtube'); });
+  $('modSpotify').addEventListener('click', function () { openModule('spotify'); });
+
+  // barra do modo navegacao (busca do YouTube, Spotify)
+  $('browseBar').addEventListener('mousedown', startDragOnBackground);
+  $('mBack').addEventListener('click', backToPlayer);
+  $('tabYoutube').addEventListener('click', function () { openModule('youtube'); });
+  $('tabSpotify').addEventListener('click', function () { openModule('spotify'); });
+  $('mHome').addEventListener('click', function () { toHost('modhome'); });
+  $('mMin').addEventListener('click', function () { toHost('min'); });
+  $('mClose').addEventListener('click', function () { toHost('close'); });
+  $('mPin').addEventListener('click', function () { $('bPin').click(); });
+  $('searchForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    submitOmni($('searchInput').value);
+  });
+  $('searchInput').addEventListener('focus', function () { S.typing = true; toHost('typing:1'); refreshUi(); });
+  $('searchInput').addEventListener('blur', function () { S.typing = false; toHost('typing:0'); refreshUi(); });
 
   // tela de erro
   $('errRetry').addEventListener('click', function () { if (S.current) play(S.current); });
@@ -382,12 +470,12 @@
   document.addEventListener('keydown', function (e) {
     var k = (e.key || '').toLowerCase();
     if (k === 'escape' && S.current && body.classList.contains('home')) { closeHome(); return; }
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'l') { e.preventDefault(); openHome(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'l') { e.preventDefault(); openOmnibox(); return; }
 
     // velocidade e saltos (D, S, R, X, Z): com o foco dentro do video o proprio script do player trata;
     // com o foco nesta pagina (por exemplo depois de clicar na barra) a pagina repassa o comando
     var cmd = speedCmdFor(e);
-    if (cmd && S.current && !S.typing && !e.ctrlKey && !e.altKey && !e.metaKey && !body.classList.contains('home')) {
+    if (cmd && S.current && S.mode === 'player' && !S.typing && !e.ctrlKey && !e.altKey && !e.metaKey && !body.classList.contains('home')) {
       e.preventDefault();
       if (cmd === 'reset' && e.repeat) return;
       if (e.shiftKey && (cmd === 'faster' || cmd === 'slower')) cmd += 'Big';
@@ -395,7 +483,7 @@
     }
   });
   document.addEventListener('paste', function (e) {
-    if (e.target && e.target.id === 'url') return;       // o campo cuida do proprio colar
+    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput')) return;   // os campos cuidam do proprio colar
     var t = e.clipboardData ? e.clipboardData.getData('text') : '';
     if (t) { e.preventDefault(); handleText(t); }
   });

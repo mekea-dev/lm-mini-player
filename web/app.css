@@ -11,6 +11,7 @@
   --accent: #ff4a43;
   --accent-hi: #ff6a5e;
   --bar-h: 34px;          /* altura da barra de cima */
+  --browse-h: 44px;       /* altura da barra do modo navegacao (igual a BrowseBarDip em Program.cs) */
   --rz: 6px;              /* espessura da alca de borda */
   --rzc: 14px;            /* tamanho da alca de canto */
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -115,7 +116,8 @@ h2 { margin: .4rem 0 .3rem; font-size: 1.25rem; font-weight: 650; }
 .field input::placeholder { color: #6f6f80; }
 .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 74, 67, .22); }
 
-.alt { margin-top: .5rem; }
+.alt { margin-top: .5rem; display: flex; flex-wrap: wrap; justify-content: center; gap: .15rem .35rem; }
+.alt .btn { padding: 0 .8rem; }
 
 .tip { margin: .9rem 0 0; font-size: .9rem; color: var(--muted); }
 .tip2 { margin-top: .25rem; font-size: .8rem; color: #7d7d8d; }
@@ -264,6 +266,106 @@ body.empty .bar, body.home .bar, body.err .bar {
 .chip:hover { background: rgba(255, 74, 67, .42); }
 .chip[hidden] { display: none; }
 
+/* ---------- modo navegacao (busca do YouTube, Spotify) ---------- */
+/* O video continua tocando aqui por baixo; o programa mostra o site numa janela (WebView2) que cobre a
+   area abaixo desta barra. Esta pagina so cuida da barra e das margens de redimensionar. */
+.browsebar {
+  position: absolute;
+  z-index: 25;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--browse-h);
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  background: linear-gradient(180deg, #0b0b11, #101018);
+  border-bottom: 1px solid var(--line);
+}
+body.browse { background: #0e0e14; }
+body.browse .browsebar { display: flex; }
+body.browse .bar, body.browse #home, body.browse #err { display: none !important; }
+body.browse #stage { visibility: hidden; }            /* o audio continua; so some a imagem */
+
+.tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  font: 600 12px/1 var(--font);
+  color: #cfcfdb;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tab .i { width: 15px; height: 15px; }
+.tab:hover { background: rgba(255, 255, 255, .09); color: #fff; }
+.tab.on { background: rgba(255, 74, 67, .18); border-color: rgba(255, 106, 94, .5); color: #fff; }
+.tab:focus-visible { outline: 2px solid #8fb3ff; outline-offset: 2px; }
+
+.msearch {
+  flex: 1;
+  min-width: 40px;
+  height: 30px;
+  display: none;
+  align-items: center;
+  padding-left: 9px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+body.mod-youtube .msearch { display: flex; }
+.msearch:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 74, 67, .2); }
+.msearch input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  font: 13px var(--font);
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.msearch input::placeholder { color: #6f6f80; }
+.msearch .ib { width: 28px; height: 26px; }
+
+.modtitle {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #c7c7d4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.mod-spotify .modtitle { display: block; }
+
+#modLoading {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  top: var(--browse-h);
+  bottom: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: .95rem;
+  color: var(--muted);
+}
+body.browse #modLoading { display: flex; }
+body.browse #toast { top: 7px; z-index: 40; }
+
 /* ---------- aviso rapido ---------- */
 #toast {
   position: absolute;
@@ -325,6 +427,12 @@ body.empty .bar, body.home .bar, body.err .bar {
 @media (max-width: 430px) { body.playing:not(.home):not(.err) #bPaste  { display: none; } }
 @media (max-width: 400px) { body.playing:not(.home):not(.err) #bPin    { display: none; } }
 @media (max-width: 365px) { body.playing:not(.home):not(.err) #bSpeed  { display: none; } }
+/* tela inicial: os botoes de baixo ficam so com icone quando a janela e estreita */
+@media (max-width: 440px) { .alt .btn span { display: none; } .alt .btn { padding: 0 .9rem; } }
+/* barra do modo navegacao: so icones nas abas quando a janela e estreita */
+@media (max-width: 540px) { .tab span { display: none; } .tab { padding: 0 8px; } }
+@media (max-width: 440px) { #mHome, #mPin { display: none; } }
+@media (max-width: 330px) { #mBack { display: none; } }
 /* janelas muito estreitas: o YouTube mostra so 2 botoes (96px), entao da para a barra ocupar um pouco mais */
 @media (max-width: 314px) { .bar { max-width: calc(100% - 112px); } }
 @media (max-height: 340px) {
@@ -336,8 +444,11 @@ body.empty .bar, body.home .bar, body.err .bar {
   .logo { display: none; }
   h1 { margin-bottom: .6rem; font-size: 1.2rem; }
 }
-@media (max-height: 170px) {
-  .tip, .alt { display: none; }
+@media (max-height: 200px) {
+  .tip { display: none; }
+}
+@media (max-height: 150px) {
+  .alt { display: none; }
 }
 @media (max-height: 200px) {
   .err-in .big, #errText { display: none; }
