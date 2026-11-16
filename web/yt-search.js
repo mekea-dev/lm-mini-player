@@ -124,7 +124,21 @@
   }
 
   function firstPageSections(data) {
-    try { return data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents; } catch (e) { return null; }
+    try {
+      var s = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents;
+      if (Array.isArray(s)) return s;
+    } catch (e) { /* tenta o outro desenho */ }
+    // a pagina veio com outro desenho (o YouTube testa variantes): procura em qualquer lugar a lista de resultados
+    var found = null;
+    (function walk(o, d) {
+      if (found || !o || typeof o !== 'object' || d > 25) return;
+      if (!Array.isArray(o) && o.sectionListRenderer && Array.isArray(o.sectionListRenderer.contents)) {
+        var c = o.sectionListRenderer.contents;
+        for (var i = 0; i < c.length; i++) { if (c[i] && c[i].itemSectionRenderer) { found = c; return; } }
+      }
+      for (var k in o) walk(o[k], d + 1);
+    })(data, 0);
+    return found;
   }
 
   function continuationSections(resp) {
@@ -138,14 +152,34 @@
     return null;
   }
 
-  // o JSON da pagina vem como  var ytInitialData = {...};</script>
+  // o JSON da pagina vem como  var ytInitialData = {...};  (ou window["ytInitialData"] = {...}): acha o "{" e fecha no "}"
+  // que o equilibra, respeitando os textos entre aspas (nao depende do que vem depois)
   function extractData(html) {
-    var i = html.indexOf('ytInitialData = ');
-    if (i < 0) return null;
-    var start = html.indexOf('{', i);
-    var end = html.indexOf(';</script>', start);
-    if (start < 0 || end < 0) return null;
-    try { return JSON.parse(html.slice(start, end)); } catch (e) { return null; }
+    var m = /ytInitialData["\]]*\s*=\s*\{/.exec(html);
+    if (!m) return null;
+    var start = m.index + m[0].length - 1;
+    var depth = 0, inStr = false, esc = false;
+    for (var i = start, n = html.length; i < n; i++) {
+      var ch = html.charCodeAt(i);
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === 92) esc = true;                 // \
+        else if (ch === 34) inStr = false;              // "
+        continue;
+      }
+      if (ch === 34) inStr = true;
+      else if (ch === 123) depth++;                     // {
+      else if (ch === 125 && --depth === 0) {           // }
+        try { return JSON.parse(html.slice(start, i + 1)); } catch (e) { return null; }
+      }
+    }
+    return null;
+  }
+
+  // o que ficou da pagina quando nao deu para ler os resultados (ajuda a entender o motivo: pagina de aviso, de verificacao...)
+  function pageInfo(html, hadData, hadSections) {
+    var t = /<title[^>]*>([^<]{0,60})/i.exec(html);
+    return 'len=' + html.length + ' dados=' + (hadData ? 1 : 0) + ' lista=' + (hadSections ? 1 : 0) + (t ? ' titulo=' + clean(t[1]) : '');
   }
 
   function readCfg(html) {
@@ -165,34 +199,51 @@
     });
   }
 
+  // falha passageira (rede, erro 5xx, limite de pedidos, pagina que veio incompleta ou diferente): tenta mais uma vez
+  function transient(e) {
+    var m = (e && e.message) || '';
+    return (e && e.name === 'TypeError') || m === 'formato' || m === 'http429' || /^http5/.test(m);
+  }
+
+  function withRetry(fn) {
+    return fn().then(null, function (e) {
+      if (!transient(e)) throw e;
+      return new Promise(function (res) { setTimeout(res, 700); }).then(fn);
+    });
+  }
+
   function runSearch(q) {
     q = String(q || '').trim();
     if (!q) return Promise.resolve({ ok: true, items: [], more: null });
-    var hl = (cfg && cfg.hl) || (navigator.language || 'pt-BR');
-    return getText('/results?search_query=' + encodeURIComponent(q) + '&sp=' + FILTER_VIDEOS + '&hl=' + encodeURIComponent(hl)).then(function (html) {
-      var c = readCfg(html);
-      if (c) cfg = c;
-      var data = extractData(html);
-      var sections = data && firstPageSections(data);
-      if (!sections) throw new Error('formato');
-      var r = collect(sections);
-      return { ok: true, items: r.items, more: r.token };
+    return withRetry(function () {
+      var hl = (cfg && cfg.hl) || (navigator.language || 'pt-BR');
+      return getText('/results?search_query=' + encodeURIComponent(q) + '&sp=' + FILTER_VIDEOS + '&hl=' + encodeURIComponent(hl)).then(function (html) {
+        var c = readCfg(html);
+        if (c) cfg = c;
+        var data = extractData(html);
+        var sections = data && firstPageSections(data);
+        if (!sections) { var err = new Error('formato'); err.info = pageInfo(html, !!data, false); throw err; }
+        var r = collect(sections);
+        return { ok: true, items: r.items, more: r.token };
+      });
     });
   }
 
   function runMore(token) {
     if (!cfg || !token) return Promise.reject(new Error('sem_config'));
-    var body = { context: { client: { clientName: 'WEB', clientVersion: cfg.ver, hl: cfg.hl, gl: cfg.gl } }, continuation: token };
-    return fetch('/youtubei/v1/search?key=' + encodeURIComponent(cfg.key) + '&prettyPrint=false', {
-      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
-    }).then(function (r) {
-      if (!r.ok) throw new Error('http' + r.status);
-      return r.json();
-    }).then(function (j) {
-      var sections = continuationSections(j);
-      if (!sections) throw new Error('formato');
-      var r = collect(sections);
-      return { ok: true, items: r.items, more: r.token };
+    return withRetry(function () {
+      var body = { context: { client: { clientName: 'WEB', clientVersion: cfg.ver, hl: cfg.hl, gl: cfg.gl } }, continuation: token };
+      return fetch('/youtubei/v1/search?key=' + encodeURIComponent(cfg.key) + '&prettyPrint=false', {
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
+      }).then(function (r) {
+        if (!r.ok) throw new Error('http' + r.status);
+        return r.json();
+      }).then(function (j) {
+        var sections = continuationSections(j);
+        if (!sections) throw new Error('formato');
+        var r = collect(sections);
+        return { ok: true, items: r.items, more: r.token };
+      });
     });
   }
 
@@ -209,7 +260,9 @@
 
   function fail(e) {
     var m = (e && e.message) || 'erro';
-    return { ok: false, error: /^http|formato|sem_config/.test(m) ? m : 'rede' };
+    var out = { ok: false, error: /^http|formato|sem_config/.test(m) ? m : 'rede' };
+    if (e && e.info) out.info = String(e.info).slice(0, 200);
+    return out;
   }
 
   function reply(prefix, seq, promise) {

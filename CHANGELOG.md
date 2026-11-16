@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## v1.5.1 - 2026-11-16
+
+- **A pesquisa do YouTube ficou mais resistente.** Se o YouTube devolver uma página incompleta, der um erro passageiro ou a rede falhar na hora, o programa tenta de novo sozinho (uma vez, depois de 0,7 s); lê a lista de resultados mesmo quando a página vem com outro desenho (o YouTube testa variantes) e mesmo quando o texto da página tem chaves e aspas no meio; e, se ainda assim não der, a mensagem de erro traz uma pista curta (tamanho e título da página recebida) para facilitar a correção.
+- Dentro da sala, abrir a aba **Fila** já aquece a janela que acha o título dos links colados, então o primeiro link colado não fica sem título.
+
 ## v1.5.0 - 2026-11-16
 
 - **Fila de vídeos compartilhada na sala.** No painel da sala, a aba **Fila** guarda os vídeos que vêm a seguir (até 50), e a lista é a mesma para todo mundo. Qualquer pessoa adiciona colando um link ou com o **+** dos resultados da pesquisa (aparece o aviso "Ana adicionou à fila: …"). **Arraste pelo cabo ⋮⋮ com o mouse** para mudar a ordem (ou use ↑ ↓ no teclado), toque um item na hora com o **▶** ou tire da fila com o **✕**. **Quando o vídeo acaba, a sala passa sozinha para o próximo da fila**, para todos (se vários computadores avisam o fim ao mesmo tempo, só o primeiro conta). Com a sala parada (sem vídeo, ou o último acabou e não havia próximo), o que for adicionado já começa a tocar. Ctrl+V com a aba aberta também põe o link na fila.

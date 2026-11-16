@@ -865,8 +865,8 @@
   function ytErrorText(err) {
     var m = err && err.message;
     if (m === 'tempo' || m === 'rede') return 'Sem resposta do YouTube. Confira a internet e tente de novo.';
-    if (m === 'formato') return 'O YouTube mudou o formato da pesquisa e não consegui ler os resultados.';
-    return 'Não consegui pesquisar agora.';
+    if (m === 'formato') return 'Não consegui ler os resultados do YouTube agora (o formato da página veio diferente).' + (err.info ? ' [' + err.info + ']' : '');
+    return 'Não consegui pesquisar agora.' + (m ? ' [' + m + ']' : '');
   }
 
   function loadResults(more) {

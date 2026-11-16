@@ -64,9 +64,22 @@
   var data = Y._extractData(html);
   check('le o ytInitialData de dentro da pagina', data && data.contents && data.contents.twoColumnSearchResultsRenderer, data && Object.keys(data));
   check('pagina sem ytInitialData ou com JSON quebrado: null', Y._extractData('<html></html>') === null && Y._extractData('var ytInitialData = {quebrado;<\/script>') === null, 1);
+  var tricky = { a: { b: 'texto com } chave e " aspas \\" e { outra' }, c: [1, { d: '}}' }], e: 'fim' };
+  var d1 = Y._extractData('<script>var ytInitialData = ' + JSON.stringify(tricky) + ';<\/script><script>var outra = {"x":1};<\/script>');
+  check('ytInitialData com chaves e aspas dentro de textos: fecha na chave certa', d1 && d1.a.b === tricky.a.b && d1.e === 'fim' && d1.c[1].d === '}}', d1);
+  var d2 = Y._extractData('<script>window["ytInitialData"] = ' + JSON.stringify({ ok: 1 }) + ';<\/script>');
+  check('ytInitialData atribuido como window["ytInitialData"] tambem e lido', d2 && d2.ok === 1, d2);
+  var d3 = Y._extractData('<script>var ytInitialData = ' + JSON.stringify({ ok: 2 }) + '<\/script>');
+  check('nao depende do que vem depois do JSON (sem ponto e virgula)', d3 && d3.ok === 2, d3);
+  check('JSON que nunca fecha: null', Y._extractData('var ytInitialData = {"a":{"b":1}') === null, 1);
   var cfg = Y._readCfg(html);
   check('le a chave, a versao do cliente e o idioma da pagina', cfg && cfg.key === 'CHAVE123' && cfg.ver === '2.20261116.01.00' && cfg.hl === 'pt' && cfg.gl === 'BR', cfg);
   check('sem chave na pagina: null', Y._readCfg('<html></html>') === null, 1);
+
+  // pagina com outro desenho (a lista de resultados em outro lugar da arvore)
+  var altData = { contents: { outroDesenho: { dentro: { sectionListRenderer: fix.first.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer } } } };
+  var htmlAlt = '<html><script>ytcfg.set({"INNERTUBE_API_KEY":"CHAVE123","INNERTUBE_CONTEXT_CLIENT_VERSION":"2.20261116.01.00"});<\/script><script>var ytInitialData = ' + JSON.stringify(altData) + ';<\/script></body></html>';
+  var flaky = { n: 0 };
 
   // ---- pedidos de rede (fetch de mentira) ----
   var calls = [];
@@ -75,7 +88,12 @@
     calls.push({ url: String(url), opts: opts });
     var u = String(url);
     function resp(body, ok, status) { return Promise.resolve({ ok: ok !== false, status: status || 200, text: function () { return Promise.resolve(body); }, json: function () { return Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body); } }); }
-    if (u.indexOf('/results?') === 0) return u.indexOf('q=erro') >= 0 || u.indexOf('erro500') >= 0 ? resp('', false, 500) : (u.indexOf('semformato') >= 0 ? resp('<html>nada</html>') : resp(html));
+    if (u.indexOf('/results?') === 0) {
+      if (u.indexOf('flaky') >= 0) { flaky.n++; return flaky.n === 1 ? Promise.reject(new TypeError('Failed to fetch')) : resp(html); }
+      if (u.indexOf('erro403') >= 0) return resp('', false, 403);
+      if (u.indexOf('desenho') >= 0) return resp(htmlAlt);
+      return u.indexOf('erro500') >= 0 ? resp('', false, 500) : (u.indexOf('semformato') >= 0 ? resp('<html><head><title>Antes de continuar para o YouTube</title></head>nada</html>') : resp(html));
+    }
     if (u.indexOf('/youtubei/v1/search') === 0) return resp(fix.second);
     if (u.indexOf('/oembed') === 0) return u.indexOf('aaaaaaaaaaa') >= 0 ? resp({ title: '  Titulo   do   video ', author_name: 'Fulano', thumbnail_url: 'x' }) : resp('', false, 404);
     return Promise.reject(new Error('rede'));
@@ -96,6 +114,17 @@
     check('YouTube respondendo erro HTTP: falha com "http500"', e1 === 'http500', e1);
     var e2 = null; try { await Y._run.search('semformato'); } catch (e) { e2 = e.message; }
     check('pagina em formato desconhecido: falha com "formato"', e2 === 'formato', e2);
+    var n0 = calls.length;
+    var rr = await Y._run.search('flaky');
+    check('falha passageira (rede caiu no 1o pedido): tenta de novo sozinho e acha os videos', rr.ok && rr.items.length === 3 && calls.length - n0 === 2, [rr, calls.length - n0]);
+    n0 = calls.length;
+    var e4 = null; try { await Y._run.search('erro403'); } catch (e) { e4 = e.message; }
+    check('erro HTTP que nao e passageiro (403) nao e repetido', e4 === 'http403' && calls.length - n0 === 1, [e4, calls.length - n0]);
+    n0 = calls.length;
+    var e5 = null; try { await Y._run.search('erro500'); } catch (e) { e5 = e.message; }
+    check('erro 500 e repetido uma vez e, se continuar, falha com http500', e5 === 'http500' && calls.length - n0 === 2, [e5, calls.length - n0]);
+    var alt = await Y._run.search('desenho');
+    check('pagina com a lista de resultados em outro lugar da arvore: ainda acha os videos', alt.ok && alt.items.length === 3 && alt.items[0].id === 'CA7ST83-cro', alt);
     var info = await Y._run.info('aaaaaaaaaaa');
     check('titulo de um video (oEmbed): titulo limpo e canal', info.ok && info.title === 'Titulo do video' && info.channel === 'Fulano' && /\/oembed\?format=json&url=https%3A%2F%2Fwww\.youtube\.com%2Fwatch%3Fv%3Daaaaaaaaaaa/.test(calls[calls.length - 1].url), [info, calls[calls.length - 1].url]);
     var bad = await Y._run.info('curto');
@@ -112,13 +141,18 @@
     check('mensagem de volta: "yres:<n>:<json>" com ok e os videos', m7 && JSON.parse(m7[1]).ok === true && JSON.parse(m7[1]).items.length === 3, posted[0]);
     posted.length = 0;
     Y.search(8, 'erro500');
-    await new Promise(function (res) { setTimeout(res, 50); });
+    await new Promise(function (res) { setTimeout(res, 1100); });                      // (a pesquisa tenta de novo depois de 0,7 s)
     check('erro volta como {ok:false,error:"http500"}', /^yres:8:/.test(posted[0] || '') && JSON.parse(posted[0].slice(7)).error === 'http500', posted[0]);
+    posted.length = 0;
+    Y.search(11, 'semformato');
+    await new Promise(function (res) { setTimeout(res, 1100); });
+    var p11 = posted[0] ? JSON.parse(posted[0].replace(/^yres:11:/, '')) : null;
+    check('pagina que nao deu para ler: o erro leva uma pista (tamanho e titulo da pagina)', p11 && p11.error === 'formato' && /titulo=Antes de continuar/.test(p11.info) && /dados=0/.test(p11.info), posted[0]);
     posted.length = 0;
     window.fetch = function () { return Promise.reject(new TypeError('Failed to fetch')); };
     Y.search(9, 'x');
     Y.info(10, 'aaaaaaaaaaa');
-    await new Promise(function (res) { setTimeout(res, 50); });
+    await new Promise(function (res) { setTimeout(res, 1100); });
     var p9 = posted.filter(function (x) { return /^yres:9:/.test(x); })[0], p10 = posted.filter(function (x) { return /^yinfo:10:/.test(x); })[0];
     check('sem rede: erro "rede" volta tanto na pesquisa quanto no titulo', p9 && JSON.parse(p9.slice(7)).error === 'rede' && p10 && JSON.parse(p10.slice(9)).error === 'rede', posted);
   } finally { window.fetch = realFetch; }
@@ -148,6 +182,10 @@
   Cl.onHost('yres:' + nz[1] + ':isto nao e json');
   var fmt = null; try { await pz; } catch (e) { fmt = e.message; }
   check('cliente: resposta que nao e json rejeita com "formato"', fmt === 'formato', fmt);
+  var pf = Cl.search('pista'); var nf = /^ysearch:(\d+):pista$/.exec(sent[sent.length - 1]);
+  Cl.onHost('yres:' + nf[1] + ':{"ok":false,"error":"formato","info":"len=10 dados=0 lista=0"}');
+  var er6 = null; try { await pf; } catch (e) { er6 = e; }
+  check('cliente: a pista do erro chega junto (err.info)', er6 && er6.message === 'formato' && er6.info === 'len=10 dados=0 lista=0', er6);
   Cl._api.test = false;
   Cl._api.post = function () { throw new Error('sem ponte'); };
   var sp = null; try { await Cl.search('x'); } catch (e) { sp = e.message; }

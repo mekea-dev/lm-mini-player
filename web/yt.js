@@ -47,7 +47,8 @@
     clearTimeout(w.t);
     var p;
     try { p = JSON.parse(text.slice(m[0].length)); } catch (e) { w.reject(new Error('formato')); return true; }
-    if (p && p.ok) w.resolve(p); else w.reject(new Error((p && p.error) || 'erro'));
+    if (p && p.ok) w.resolve(p);
+    else { var er = new Error((p && p.error) || 'erro'); if (p && p.info) er.info = String(p.info); w.reject(er); }
     return true;
   }
 
