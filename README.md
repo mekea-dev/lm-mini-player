@@ -34,11 +34,11 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 |---|---|
 | Tocar um vídeo | Copie o link e abra o programa (se já houver um link do YouTube copiado, ele toca direto). Ou, com a janela em foco, aperte **Ctrl+V** |
 | Trocar de vídeo | **Ctrl+V** de novo, o botão de colar da barra, ou **Ctrl+L** para pesquisar ou digitar o link |
-| Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: uma **lista de resultados** aparece no programa, como no YouTube (miniatura, duração, título, canal, visualizações e data; rolar até o fim carrega mais). Clique num vídeo para tocar no player (com a velocidade livre e tudo mais); o **+** põe na [fila da sala](#fila-de-vídeos). Link colado no campo toca direto. **Ver no site do YouTube** (e **Explorar YouTube**, ou a casinha da barra) abrem o site de verdade |
+| Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: uma **lista de resultados** aparece no programa, como no YouTube (miniatura, duração, título, canal, visualizações e data; rolar até o fim carrega mais). Clique num vídeo para tocar no player (com a velocidade livre e tudo mais); o **+** põe na [fila](#fila-de-vídeos). Link colado no campo toca direto. **Ver no site do YouTube** (e **Explorar YouTube**, ou a casinha da barra) abrem o site de verdade |
 | Ouvir Spotify | Botão **Spotify** na tela de pesquisa (ou a aba **Spotify** na barra do modo navegação). Entre na sua conta uma vez: suas playlists e músicas curtidas aparecem. Ele continua tocando quando você volta ao player |
-| Ver o mesmo vídeo com outras pessoas | Botão **Sala** (ícone de pessoas, na barra e na tela inicial): escreva o seu nome e **Criar sala**, e passe o código de 8 letras e números; quem tem o código usa **Entrar**. Veja [Salas](#salas-assistir-junto) |
+| Ver o mesmo vídeo com outras pessoas | Botão **Sala e fila** (ícone de pessoas, na barra e na tela inicial): escreva o seu nome e **Criar sala**, e passe o código de 8 letras e números; quem tem o código usa **Entrar**. Veja [Salas](#salas-assistir-junto) |
 | Conversar por voz na sala | Dentro da sala, o botão de **microfone** (na barra e no painel da sala). Veja [Conversar por voz](#conversar-por-voz) |
-| Fila de vídeos da sala | No painel da sala, a aba **Fila**: cole um link (ou use o **+** dos resultados), **arraste pelo cabo ⋮⋮** para mudar a ordem, **▶** toca na hora, **✕** tira. Quando o vídeo acaba, toca o próximo. Veja [Fila de vídeos](#fila-de-vídeos) |
+| Fila de vídeos | Botão **Sala e fila** (o número no canto dele é o de vídeos na fila), aba **Fila**: cole um link (ou use o **+** dos resultados), **arraste pelo cabo ⋮⋮** para mudar a ordem, **▶** toca na hora, **✕** tira. Quando o vídeo acaba, toca o próximo. Fora da sala é a sua fila; na sala, a de todos. Veja [Fila de vídeos](#fila-de-vídeos) |
 | Mover | Arraste pela **barra** no canto de cima (ela aparece quando o mouse mexe sobre a janela; arrasta de qualquer ponto dela, menos dos botões) |
 | Redimensionar | Arraste **qualquer borda ou canto** (tamanho mínimo 240 × 135) |
 | Mudar a velocidade | **D** acelera e **S** desacelera (0,1× por toque; com **Shift**, 1×). **R** volta a 1× e, apertando de novo, à velocidade anterior. Vai de **0,07× a 16×** e fica lembrada. O selo na barra mostra o valor (clique nele para voltar a 1×) |
@@ -60,6 +60,23 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 - Para o Spotify (ou os resultados do YouTube) ficar maior, é só aumentar a janela: o site ocupa tudo abaixo da barra.
 - O **Ctrl+V e as teclas de velocidade valem quando a janela do mini player está em foco** (clique nela uma vez). Não são atalhos globais.
 
+## Fila de vídeos
+
+![A aba Fila, com os vídeos que vêm a seguir](docs/fila.png)
+
+A **fila** guarda os vídeos que **vêm a seguir** (até 50). Fica na aba **Fila** do painel que o botão **Sala e fila** (o ícone de pessoas da barra) abre, e o número de vídeos aparece no canto do botão. São duas filas, e o programa usa a que vale agora:
+
+- **Fora de uma sala é a *sua* fila**, só neste computador: fica guardada mesmo se você fechar o programa (e duas janelas do programa abertas veem a mesma).
+- **Dentro de uma sala é a *fila da sala***: a mesma lista para todo mundo, guardada no servidor. Quando você sai da sala, a sua volta como estava.
+
+O resto é igual nas duas:
+
+- **Adicionar:** cole um link no campo da aba (ou aperte **Ctrl+V** com a aba aberta), ou use o **+** dos resultados da pesquisa. Na sala, cada item mostra quem adicionou e todos recebem o aviso "Ana adicionou à fila: …".
+- **Mudar a ordem:** **arraste pelo cabo ⋮⋮** com o mouse para antes ou depois de outro vídeo (na sala, todos veem a nova ordem na hora). Pelo teclado: foco no cabo e **↑ / ↓**.
+- **▶ Tocar agora** toca o vídeo na hora (na sala, para todos) e ele sai da fila; **✕** tira da fila; **Limpar a fila** esvazia.
+- **Quando o vídeo acaba, toca o próximo da fila** (na sala, nos computadores de todos). Se estava tudo parado (nenhum vídeo tocando, ou o último acabou sem próximo), o que for adicionado **já começa a tocar**. Na sua fila, um vídeo que não pode tocar aqui (bloqueado pelo dono, removido) é pulado.
+- **Playlists do YouTube** (link com `list=`) tocam como antes e passam sozinhas de um vídeo para o outro, sem mexer na fila.
+
 ## Salas (assistir junto)
 
 ![A sala aberta, com quem está nela e o código para passar aos amigos](docs/sala.png)
@@ -76,18 +93,6 @@ Com uma sala, **todo mundo vê o mesmo vídeo ao mesmo tempo**: quem põe, pausa
 - Funciona para vídeos do YouTube (o Spotify toca à parte) e precisa de internet de todo mundo. Salas sem uso por 24 horas somem.
 - Se a sua internet cair por alguns segundos, o programa reconecta sozinho e ninguém percebe. Passando de uns 5 segundos, você sai da lista e volta a aparecer quando a conexão voltar.
 - O servidor das salas é um pequeno serviço gratuito da Cloudflare que guarda só o estado da sala e leva as mensagens entre as pessoas. Detalhes e como montar o seu próprio: [`relay/LEIA-ME.md`](relay/LEIA-ME.md).
-
-### Fila de vídeos
-
-![A aba Fila do painel da sala, com os vídeos que vêm a seguir](docs/fila.png)
-
-Na aba **Fila** do painel da sala ficam os vídeos que **vêm a seguir**, e a lista é **a mesma para todo mundo da sala** (até 50 vídeos).
-
-- **Adicionar:** cole um link no campo da aba (ou aperte **Ctrl+V** com a aba aberta) ou use o **+** dos resultados da pesquisa. Cada item mostra a miniatura, o título e quem adicionou, e todos recebem o aviso "Ana adicionou à fila: …".
-- **Mudar a ordem:** **arraste pelo cabo ⋮⋮** (com o mouse) para antes ou depois de outro vídeo; todos veem a nova ordem na hora. Pelo teclado: foco no cabo e **↑ / ↓**.
-- **▶ Tocar agora** põe o vídeo para todos (ele sai da fila); **✕** tira da fila; **Limpar a fila** esvazia.
-- **Quando o vídeo acaba, a sala passa sozinha para o próximo da fila**, nos computadores de todos. Se a sala estava parada (sem vídeo, ou o último acabou e não havia próximo), o que for adicionado **já começa a tocar**.
-- Vídeos soltos da fila entram um a um; **playlists do YouTube** (link com `list=`) tocam como antes e passam sozinhas de um vídeo para o outro, sem mexer na fila.
 
 ### Conversar por voz
 
@@ -118,7 +123,7 @@ Dentro da sala, o botão de **microfone** (na barra de cima e no painel da sala)
 - **Verificação de versão:** ao abrir (e a cada 6 horas) o programa faz um pedido comum a `api.github.com` pelo último release, e baixa o `.zip` de `github.com/mekea-dev/lm-mini-player` se houver versão nova. O GitHub enxerga o seu endereço IP e o nome do programa, como em qualquer download; o programa não envia mais nada. Dá para desligar (`update=0`, veja acima).
 - Se você entrar na sua conta do YouTube ou do Spotify dentro do programa, o login fica no perfil local do programa (veja abaixo), como num navegador. O programa não guarda senhas.
 - Ao abrir **sem** link, ele olha a área de transferência uma vez para ver se há um link do YouTube. Nada é guardado nem enviado.
-- Os dados locais ficam em `%LOCALAPPDATA%\LMMiniPlayer`: `config.ini` (posição, tamanho e a opção de atualização), `erro.log` (só se algo der errado), a pasta `update` (a versão nova enquanto espera para ser instalada) e a pasta `WebView2` (cookies e preferências do YouTube, como o volume). Para voltar ao estado de fábrica, feche o programa e apague essa pasta.
+- Os dados locais ficam em `%LOCALAPPDATA%\LMMiniPlayer`: `config.ini` (posição, tamanho e a opção de atualização), `erro.log` (só se algo der errado), a pasta `update` (a versão nova enquanto espera para ser instalada) e a pasta `WebView2` (cookies e preferências do YouTube, como o volume, e a **sua fila de vídeos**, que fica só aqui e nunca é enviada; só a fila **da sala** vai para o servidor). Para voltar ao estado de fábrica, feche o programa e apague essa pasta.
 
 ## Problemas comuns
 
@@ -142,9 +147,9 @@ As **salas** (`web/room.js`, `relay/`) usam um pequeno servidor (um Cloudflare W
 ```
 lm-mini-player/
 ├─ src/        Program.cs (a janela), Updater.cs (atualização automática), manifesto e ícone
-├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), room.js (salas e fila), voice.js (voz), yt.js e yt-search.js (a lista de resultados da pesquisa), speed-frame.js (velocidade e salas dentro do player) e yt-browse.js (cliques no site do YouTube)
+├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), room.js (salas e fila da sala), queue.js (a sua fila, neste computador), voice.js (voz), yt.js e yt-search.js (a lista de resultados da pesquisa), speed-frame.js (velocidade e salas dentro do player) e yt-browse.js (cliques no site do YouTube)
 ├─ relay/      o servidor de salas (worker.js, wrangler.jsonc) e o guia para montá-lo
-├─ tests/      links.html (leitor de links), room-test.html (servidor de salas e fila) e yt-test.html (leitura dos resultados da pesquisa, com uma amostra real em yt-fixture.json)
+├─ tests/      links.html (leitor de links), room-test.html (servidor de salas e fila), yt-test.html (leitura dos resultados da pesquisa, com uma amostra real em yt-fixture.json) e queue-test.html (a sua fila)
 ├─ docs/       imagens deste README
 ├─ build.ps1   compila (e empacota com -Package)
 ├─ CHANGELOG.md  o que mudou em cada versão (vira as notas do release)
@@ -162,7 +167,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -Package   # e também o .z
 
 **Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` e `AssemblyFileVersion` em `src/Program.cs` (os três têm de bater com a tag: a atualização automática recusa um pacote cuja versão interna não é a anunciada, e o workflow confere isso antes de compilar), acrescente a seção da versão no `CHANGELOG.md`, faça o commit e envie uma tag (`git tag -a v1.4.0 -m "..." && git push origin v1.4.0`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o histórico da versão e o SHA-256 nas notas.
 
-**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** com o mesmo servidor, abra <http://localhost:8000/tests/room-test.html> (mostra "OK 98/98" no título; roda o código real do servidor com um ambiente de mentira, sem rede). **Testes da pesquisa do YouTube:** <http://localhost:8000/tests/yt-test.html> ("OK 40/40"). Detalhes no fim de `relay/LEIA-ME.md`.
+**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** com o mesmo servidor, abra <http://localhost:8000/tests/room-test.html> (mostra "OK 98/98" no título; roda o código real do servidor com um ambiente de mentira, sem rede). **Testes da pesquisa do YouTube:** <http://localhost:8000/tests/yt-test.html> ("OK 50/50"). **Testes da sua fila:** <http://localhost:8000/tests/queue-test.html> ("OK 32/32"). Detalhes no fim de `relay/LEIA-ME.md`.
 
 ## Créditos e avisos
 

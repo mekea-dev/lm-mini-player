@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## v1.6.0 - 2026-11-16
+
+- **Fila de vídeos só sua, fora das salas.** A aba **Fila** agora existe também quando você não está numa sala: o painel do botão **Sala e fila** (o ícone de pessoas da barra, que mostra o número de vídeos na fila) tem as abas **Sala** e **Fila**. Fora da sala a fila é **sua**, só neste computador, e fica guardada mesmo se você fechar o programa; dentro de uma sala é a fila da sala (a de todos), e quando você sai a sua volta como estava. O resto é igual: cole um link (ou use o **+** dos resultados da pesquisa), **arraste pelo cabo ⋮⋮** para mudar a ordem (ou ↑ ↓), **▶** toca na hora, **✕** tira, e **quando o vídeo acaba toca o próximo**. Com nada tocando, o primeiro vídeo adicionado já começa a tocar. Um vídeo da sua fila que não pode tocar aqui (bloqueado pelo dono, removido) é pulado.
+- O **+** dos resultados agora funciona em qualquer lugar (antes só dentro de uma sala) e, se um vídeo da fila começa a tocar enquanto você ainda está olhando os resultados, ele toca por trás sem tirar você da pesquisa.
+- O painel da sala ganhou as abas **Sala | Fila** no topo, em vez do título "Sala".
+
 ## v1.5.1 - 2026-11-16
 
 - **A pesquisa do YouTube ficou mais resistente.** Se o YouTube devolver uma página incompleta, der um erro passageiro ou a rede falhar na hora, o programa tenta de novo sozinho (uma vez, depois de 0,7 s); lê a lista de resultados mesmo quando a página vem com outro desenho (o YouTube testa variantes) e mesmo quando o texto da página tem chaves e aspas no meio; e, se ainda assim não der, a mensagem de erro traz uma pista curta (tamanho e título da página recebida) para facilitar a correção.

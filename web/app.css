@@ -547,14 +547,19 @@ body.browse .roompanel { display: none; }
   .rp-msg { margin-top: .35rem; font-size: .78rem; }
 }
 
+/* numero de videos na fila, no canto do botao da sala */
+#bRoom { position: relative; }
+.qb { position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; padding: 0 3px; font: 700 9px/13px var(--font); text-align: center; color: #fff; background: var(--accent); border-radius: 999px; pointer-events: none; }
+
 /* abas do painel da sala (Sala | Fila) e a fila de videos */
+.rp-qwho { margin: 0 0 .5rem; font-size: max(11px, .8rem); color: var(--muted); }
 .rp-tabs { display: flex; gap: .3rem; justify-content: center; margin: 0 0 .6rem; }
 .rp-tab { height: 2rem; padding: 0 .9rem; font: 600 max(12px, .88rem) var(--font); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
 .rp-tab:hover { color: #fff; background: rgba(255, 255, 255, .07); }
 .rp-tab.on { color: #fff; background: rgba(255, 74, 67, .16); border-color: rgba(255, 106, 94, .5); }
 .rp-tab:focus-visible { outline: 2px solid #8fb3ff; outline-offset: 2px; }
 .rp-badge { display: inline-block; min-width: 1.3rem; margin-left: .2rem; padding: 0 .35rem; font-size: .72rem; line-height: 1.3rem; text-align: center; color: #fff; background: var(--accent); border-radius: 999px; }
-.roompanel.q-on .rp-card h2 { display: none; }
+.rp-card h2 { display: none; }                      /* o titulo agora sao as abas Sala | Fila */
 .rp-qadd { display: flex; gap: .4rem; margin: 0 0 .5rem; }
 .rp-qadd input {
   flex: 1;

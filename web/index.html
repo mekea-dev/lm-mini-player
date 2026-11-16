@@ -116,7 +116,7 @@
       <button type="button" class="btn ghost" id="pasteHome" title="Colar o link copiado"><svg class="i"><use href="#i-clip"/></svg><span>Colar link</span></button>
       <button type="button" class="btn ghost" id="modYoutube" title="Explorar o YouTube aqui dentro"><svg class="i"><use href="#i-search"/></svg><span>Explorar YouTube</span></button>
       <button type="button" class="btn ghost" id="modSpotify" title="Abrir o Spotify aqui dentro"><svg class="i"><use href="#i-music"/></svg><span>Spotify</span></button>
-      <button type="button" class="btn ghost" id="roomHome" title="Ver o mesmo vídeo junto com outras pessoas"><svg class="i"><use href="#i-users"/></svg><span>Sala</span></button>
+      <button type="button" class="btn ghost" id="roomHome" title="Sala (ver o mesmo vídeo junto com outras pessoas) e fila de vídeos"><svg class="i"><use href="#i-users"/></svg><span>Sala e fila</span></button>
     </div>
     <p class="tip">Dica: copie um link e aperte <kbd>Ctrl</kbd> + <kbd>V</kbd>. Ele toca na hora.</p>
     <p class="tip tip2">Arraste pela barra de cima · redimensione por qualquer borda</p>
@@ -145,7 +145,7 @@
   </div>
   <button type="button" class="chip" id="bSpeed" hidden title="Velocidade do vídeo: D acelera, S desacelera, R volta a 1× (ou clique aqui)" aria-label="Velocidade do vídeo">1×</button>
   <button type="button" class="ib" id="bLink" title="Pesquisar ou colar link (Ctrl+L)" aria-label="Pesquisar ou colar link"><svg class="i"><use href="#i-search"/></svg></button>
-  <button type="button" class="ib" id="bRoom" title="Sala: ver o mesmo vídeo junto com outras pessoas" aria-label="Sala"><svg class="i"><use href="#i-users"/></svg></button>
+  <button type="button" class="ib" id="bRoom" title="Sala e fila de vídeos" aria-label="Sala e fila"><svg class="i"><use href="#i-users"/></svg><span class="qb" id="bRoomQ" hidden>0</span></button>
   <button type="button" class="ib" id="bMic" hidden title="Entrar na voz" aria-label="Microfone"><svg class="i"><use href="#i-mic"/></svg></button>
   <button type="button" class="ib" id="bOp"    title="Transparência da janela" aria-label="Transparência da janela"><svg class="i"><use href="#i-opacity"/></svg></button>
   <button type="button" class="ib on" id="bPin" title="Sempre por cima das outras janelas" aria-label="Sempre por cima" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg></button>
@@ -194,10 +194,14 @@
 <i class="rz se" data-d="se"></i>
 
 <!-- Painel da sala (codigo para ver o mesmo video junto com outras pessoas) -->
-<section id="roomPanel" class="roompanel" hidden aria-label="Sala">
+<section id="roomPanel" class="roompanel" hidden aria-label="Sala e fila">
   <div class="rp-card">
     <button type="button" class="ib rp-x" id="rpClose" title="Fechar" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2>Sala</h2>
+    <div class="rp-tabs" role="tablist">
+      <button type="button" class="rp-tab on" id="rpTabRoom" role="tab" aria-selected="true">Sala</button>
+      <button type="button" class="rp-tab" id="rpTabQueue" role="tab" aria-selected="false">Fila <span class="rp-badge" id="rpQCount" hidden>0</span></button>
+    </div>
     <div id="rpOut">
       <p class="rp-txt">Todo mundo na sala vê o mesmo vídeo ao mesmo tempo (quem põe, pausa ou pula, muda para todos) e pode conversar por voz. Cada pessoa toca o seu próprio vídeo.</p>
       <input id="rpName" class="rp-name" type="text" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Seu nome" aria-label="Seu nome na sala">
@@ -208,10 +212,6 @@
       </form>
     </div>
     <div id="rpIn" hidden>
-      <div class="rp-tabs" role="tablist">
-        <button type="button" class="rp-tab on" id="rpTabRoom" role="tab" aria-selected="true">Sala</button>
-        <button type="button" class="rp-tab" id="rpTabQueue" role="tab" aria-selected="false">Fila <span class="rp-badge" id="rpQCount" hidden>0</span></button>
-      </div>
       <div id="rpPaneRoom">
         <div class="rp-top">
           <div class="rp-code" id="rpCodeShow" title="Código da sala">--------</div>
@@ -230,16 +230,17 @@
         <label class="rp-me"><span>Seu nome</span><input id="rpName2" type="text" maxlength="24" spellcheck="false" autocomplete="off" aria-label="Seu nome na sala"></label>
         <div class="rp-row"><button type="button" class="btn ghost" id="rpLeave">Sair da sala</button></div>
       </div>
-      <div id="rpPaneQueue" hidden>
-        <form id="rpQForm" class="rp-qadd" autocomplete="off">
-          <input id="rpQInput" type="text" spellcheck="false" autocapitalize="off" placeholder="Colar um link para a fila" aria-label="Link do vídeo para adicionar à fila">
-          <button type="submit" class="btn sm" id="rpQAdd"><svg class="i"><use href="#i-plus"/></svg><span>Adicionar</span></button>
-        </form>
-        <ul class="rp-queue" id="rpQList"></ul>
-        <p class="rp-txt rp-qempty" id="rpQEmpty">A fila está vazia. Cole um link acima ou use o <b>+</b> nos resultados da pesquisa.</p>
-        <p class="rp-qhint" id="rpQHint">Arraste <svg class="i"><use href="#i-grip"/></svg> para mudar a ordem. Quando o vídeo acaba, toca o próximo.</p>
-        <div class="rp-row"><button type="button" class="btn ghost sm" id="rpQClear">Limpar a fila</button></div>
-      </div>
+    </div>
+    <div id="rpPaneQueue" hidden>
+      <p class="rp-qwho" id="rpQWho">Sua fila · só neste computador</p>
+      <form id="rpQForm" class="rp-qadd" autocomplete="off">
+        <input id="rpQInput" type="text" spellcheck="false" autocapitalize="off" placeholder="Colar um link para a fila" aria-label="Link do vídeo para adicionar à fila">
+        <button type="submit" class="btn sm" id="rpQAdd"><svg class="i"><use href="#i-plus"/></svg><span>Adicionar</span></button>
+      </form>
+      <ul class="rp-queue" id="rpQList"></ul>
+      <p class="rp-txt rp-qempty" id="rpQEmpty">A fila está vazia. Cole um link acima ou use o <b>+</b> nos resultados da pesquisa.</p>
+      <p class="rp-qhint" id="rpQHint">Arraste <svg class="i"><use href="#i-grip"/></svg> para mudar a ordem. Quando o vídeo acaba, toca o próximo.</p>
+      <div class="rp-row"><button type="button" class="btn ghost sm" id="rpQClear">Limpar a fila</button></div>
     </div>
     <p class="rp-msg" id="rpMsg" role="status"></p>
   </div>
@@ -257,6 +258,7 @@
 <script src="link.js"></script>
 <script src="room.js"></script>
 <script src="voice.js"></script>
+<script src="queue.js"></script>
 <script src="yt.js"></script>
 <script src="app.js"></script>
 </body>

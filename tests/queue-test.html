@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes da fila pessoal…</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; background: #111; color: #eee; padding: 1rem 1.5rem; }
+  code { background: #222; padding: .1em .4em; border-radius: 4px; }
+  .ok { color: #5ee0a0; } .bad { color: #ff6a5e; }
+  li { margin: .15rem 0; }
+</style>
+</head>
+<body>
+<h1>Fila pessoal (<code>web/queue.js</code>)</h1>
+<p>A fila de videos que vale fora das salas, guardada no armazenamento local. Na pasta do projeto:
+<code>python -m http.server 8000</code>; depois abra <code>http://localhost:8000/tests/queue-test.html</code>.</p>
+<h2 id="resumo">rodando…</h2>
+<ul id="lista"></ul>
+<script src="../web/queue.js"></script>
+<script>
+(function () {
+  var results = [];
+  function check(name, cond, extra) { results.push({ name: name, ok: !!cond, extra: cond ? undefined : extra }); }
+  var Q = window.LMQueue;
+  var KEY = 'lmmp.queue';
+  var A = 'aaaaaaaaaaa', B = 'bbbbbbbbbbb', C = 'ccccccccccc', D = 'ddddddddddd';
+  function fresh() { window.localStorage.removeItem(KEY); Q._reload(); }
+  function vids() { return Q.items().map(function (i) { return i.vid; }).join(','); }
+  var events = 0;
+  Q.onChange(function () { events++; });
+
+  fresh();
+  check('comeca vazia', Q.count() === 0 && Q.items().length === 0 && !Q.isFull() && Q.MAX === 50, Q.items());
+
+  // ---- adicionar ----
+  var it = Q.add(A, 'Primeiro');
+  check('adicionar: devolve o item (id, video e titulo) e a lista passa a ter 1', it && /^[A-Za-z0-9_-]+$/.test(it.id) && it.vid === A && it.title === 'Primeiro' && Q.count() === 1, it);
+  check('video invalido (curto, longo, vazio, numero, nulo) nao entra', Q.add('curto', 'x') === null && Q.add('x'.repeat(12), 'x') === null && Q.add('', 'x') === null && Q.add(12345678901, 'x') === null && Q.add(null, 'x') === null && Q.count() === 1, Q.items());
+  var t = Q.add(B, '  Titulo' + String.fromCharCode(7) + '   com   espacos ' + 'x'.repeat(200));
+  check('titulo limpo: sem caractere de controle, espacos arrumados, ate 100 letras', t.title.indexOf('Titulo com espacos x') === 0 && Array.from(t.title).length === 100 && t.title.indexOf(String.fromCharCode(7)) < 0, t.title);
+  check('titulo que nao e texto vira vazio', Q.add(C, 123).title === '' && Q.add(D, null).title === '', Q.items());
+  fresh();
+  Q.add(A, 'a'); Q.add(B, 'b');
+  Q.add(C, 'c', 0);
+  check('posicao 0 = o proximo da fila', vids() === [C, A, B].join(','), vids());
+  Q.add(D, 'd', 99);
+  check('posicao alem do fim vai para o fim', vids() === [C, A, B, D].join(','), vids());
+  fresh();
+  Q.add(A, 'a'); Q.add(B, 'b', -5); Q.add(C, 'c', NaN); Q.add(D, 'd', 1.9);
+  check('posicao negativa vira 0, NaN vai para o fim, fracao arredonda para baixo', vids() === [B, A, C, D].join(',') || vids() === [B, D, A, C].join(','), vids());
+
+  // ---- persistencia ----
+  fresh();
+  Q.add(A, 'Um'); Q.add(B, 'Dois');
+  var raw = JSON.parse(window.localStorage.getItem(KEY));
+  check('fica guardada no armazenamento local (video e titulo)', raw.length === 2 && raw[0].vid === A && raw[1].title === 'Dois', raw);
+  Q._reload();
+  check('recarregar (abrir o programa de novo) devolve a mesma fila', vids() === [A, B].join(',') && Q.items()[1].title === 'Dois', Q.items());
+  var ids = Q.items().map(function (i) { return i.id; });
+  Q._reload();
+  check('os ids continuam os mesmos depois de recarregar', Q.items().map(function (i) { return i.id; }).join() === ids.join(), 1);
+
+  // ---- limite ----
+  fresh();
+  for (var i = 0; i < 50; i++) Q.add('v' + String(i).padStart(10, '0'), 't' + i);
+  check('aceita 50 itens e fica cheia', Q.count() === 50 && Q.isFull(), Q.count());
+  check('o 51o e recusado e a fila nao muda', Q.add(A, 'a mais') === null && Q.count() === 50, Q.count());
+
+  // ---- mover ----
+  fresh();
+  var ia = Q.add(A, 'a'), ib = Q.add(B, 'b'), ic = Q.add(C, 'c'), id = Q.add(D, 'd');
+  check('mover o ultimo para o topo', Q.move(id.id, 0) === true && vids() === [D, A, B, C].join(','), vids());
+  Q.move(id.id, 3);
+  check('mover o primeiro para o fim', vids() === [A, B, C, D].join(','), vids());
+  Q.move(ia.id, 2);
+  check('mover para o meio: o item termina na posicao pedida', vids() === [B, C, A, D].join(','), vids());
+  Q.move(ia.id, 99);
+  check('mover para alem do fim vai para o fim; negativo vai para o topo', vids() === [B, C, D, A].join(',') && Q.move(ia.id, -3) === true && vids() === [A, B, C, D].join(','), vids());
+  var before = events;
+  check('mover item que nao existe, destino ruim ou o mesmo lugar: sem mudanca e sem aviso', Q.move('nada', 0) === false && Q.move(ia.id, 'x') === false && Q.move(ia.id, NaN) === false && Q.move(ia.id, 0) === true && events === before, [events, before]);
+
+  // ---- tirar ----
+  fresh();
+  var r1 = Q.add(A, 'a'), r2 = Q.add(B, 'b'), r3 = Q.add(C, 'c');
+  check('remover tira o item certo', Q.remove(r2.id) === true && vids() === [A, C].join(',') && Q.remove(r2.id) === false, vids());
+  var tk = Q.take(r1.id);
+  check('take tira e devolve o item', tk && tk.vid === A && vids() === C && Q.take('nada') === null, [tk, vids()]);
+  Q.add(D, 'd');
+  var sh = Q.shift();
+  check('shift tira e devolve o primeiro; fila vazia devolve null', sh.vid === C && vids() === D && Q.shift().vid === D && Q.shift() === null && Q.count() === 0, sh);
+  Q.add(A, 'a'); Q.add(B, 'b');
+  Q.clear();
+  check('limpar esvazia (e guarda vazia)', Q.count() === 0 && window.localStorage.getItem(KEY) === '[]', window.localStorage.getItem(KEY));
+
+  // ---- avisos de mudanca ----
+  fresh();
+  events = 0;
+  var e1 = Q.add(A, 'a'), e2 = Q.add(B, 'b');
+  Q.move(e1.id, 1); Q.remove(e2.id); Q.shift(); Q.add(C, 'c'); Q.clear();
+  check('cada mudanca avisa uma vez (2 adds, mover, remover, shift, add, limpar = 7)', events === 7, events);
+  events = 0;
+  Q.clear(); Q.shift(); Q.add('curto', 'x');
+  check('o que nao muda nada nao avisa (limpar vazia, shift vazio, add invalido)', events === 0, events);
+
+  // ---- copias ----
+  fresh();
+  Q.add(A, 'a');
+  var cp = Q.items(); cp[0].vid = 'zzzzzzzzzzz'; cp.push({});
+  check('items() devolve copias: mexer nelas nao muda a fila', vids() === A && Q.count() === 1, Q.items());
+
+  // ---- armazenamento estragado ----
+  window.localStorage.setItem(KEY, 'isto nao e json{');
+  Q._reload();
+  check('texto estragado no armazenamento: comeca vazia, sem erro', Q.count() === 0, Q.items());
+  window.localStorage.setItem(KEY, '{"nao":"uma lista"}');
+  Q._reload();
+  check('JSON que nao e lista: comeca vazia', Q.count() === 0, Q.items());
+  window.localStorage.setItem(KEY, JSON.stringify([1, null, 'x', { vid: A }, { vid: 'curto' }, { vid: B, title: 'ok', id: 'same' }, { vid: C, id: 'same' }, { vid: D, title: 5 }]));
+  Q._reload();
+  var bad = Q.items();
+  check('so itens validos sobrevivem (video de 11 caracteres), ids repetidos viram ids novos e titulo ruim vira vazio',
+    bad.length === 4 && bad.map(function (x) { return x.vid; }).join() === [A, B, C, D].join() && new Set(bad.map(function (x) { return x.id; })).size === 4 && bad[3].title === '', bad);
+  var many = []; for (var k = 0; k < 80; k++) many.push({ vid: 'w' + String(k).padStart(10, '0'), title: 't' });
+  window.localStorage.setItem(KEY, JSON.stringify(many));
+  Q._reload();
+  check('lista guardada com mais de 50: so os 50 primeiros', Q.count() === 50, Q.count());
+
+  // ---- outra janela do programa mexe na fila (evento "storage") ----
+  fresh();
+  events = 0;
+  window.localStorage.setItem(KEY, JSON.stringify([{ id: 'x1', vid: A, title: 'Da outra janela' }]));
+  window.dispatchEvent(new StorageEvent('storage', { key: KEY }));
+  check('mudanca vinda de outra janela: recarrega a lista e avisa', Q.count() === 1 && Q.items()[0].title === 'Da outra janela' && events === 1, [Q.items(), events]);
+  window.dispatchEvent(new StorageEvent('storage', { key: 'outra.chave' }));
+  check('mudanca de outra chave do armazenamento e ignorada', events === 1, events);
+  window.localStorage.removeItem(KEY);
+  window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  check('armazenamento limpo por inteiro (key nula): a fila esvazia e avisa', Q.count() === 0 && events === 2, [Q.count(), events]);
+
+  fresh();
+  var passed = results.filter(function (q) { return q.ok; }).length, failed = results.length - passed;
+  var lista = document.getElementById('lista');
+  results.forEach(function (q) {
+    var li = document.createElement('li');
+    li.className = q.ok ? 'ok' : 'bad';
+    li.textContent = (q.ok ? 'OK  ' : 'FALHOU  ') + q.name + (q.ok ? '' : '  ->  ' + JSON.stringify(q.extra));
+    lista.appendChild(li);
+  });
+  var resumo = document.getElementById('resumo');
+  resumo.textContent = (failed ? 'FALHOU ' : 'OK ') + passed + '/' + results.length;
+  resumo.className = failed ? 'bad' : 'ok';
+  document.title = resumo.textContent;
+})();
+</script>
+</body>
+</html>

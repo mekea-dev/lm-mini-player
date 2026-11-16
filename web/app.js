@@ -54,6 +54,8 @@
     ytGen: 0,           // descarta resposta de pesquisa antiga
     rpTab: 'room',      // aba do painel da sala: 'room' | 'queue'
     qDrag: null,        // arraste da fila em andamento
+    qIdle: true,        // nada tocando (ou o ultimo video acabou sem proximo): o que entrar na SUA fila comeca a tocar
+    fromQueue: null,    // id do video que a SUA fila pos para tocar (se nao puder tocar aqui, passa para o proximo)
     toastTimer: 0,
     muteOnReady: false  // so para testes automaticos (abre o video mudo)
   };
@@ -346,16 +348,16 @@
     renderRoom();
     roomMsg('');
     syncVolumes();
-    if (!Room.code()) setTimeout(function () { (Room.name() ? $('rpCode') : $('rpName')).focus(); }, 30);
+    if (S.rpTab === 'queue') {
+      renderQueue(true);
+      if (ytAvailable()) toHost('yprep');                              // aquece a janela que acha o titulo dos links colados
+    } else if (!Room.code()) setTimeout(function () { (Room.name() ? $('rpCode') : $('rpName')).focus(); }, 30);
   }
 
   function closeRoomPanel() { $('roomPanel').hidden = true; focusPlayer(); }
 
-  // desenha o botao da barra e o painel conforme a sala (e esconde tudo se o servidor de salas nao esta configurado)
+  // desenha o botao da barra e o painel conforme a sala e a aba (Sala | Fila); a fila vale em qualquer caso
   function renderRoom() {
-    var avail = Room.available();
-    $('bRoom').hidden = !avail;
-    $('roomHome').hidden = !avail;
     var code = Room.code();
     var on = !!code;
     var list = Room.members();
@@ -363,23 +365,18 @@
     var b = $('bRoom');
     b.classList.toggle('room-on', on);
     b.title = on
-      ? 'Sala ' + code + ': ' + n + (n === 1 ? ' pessoa' : ' pessoas') + ' (clique para ver)'
-      : 'Sala: ver o mesmo vídeo junto com outras pessoas';
+      ? 'Sala ' + code + ': ' + n + (n === 1 ? ' pessoa' : ' pessoas') + ' (clique para ver a sala e a fila)'
+      : 'Sala e fila de vídeos';
     body.classList.toggle('in-room', on);
-    $('rpOut').hidden = on;
-    $('rpIn').hidden = !on;
     if (on) {
       $('rpCodeShow').textContent = code;
       $('rpInfo').textContent = (Room.status() === 'reconectando' ? 'Reconectando… ' : '') +
         n + (n === 1 ? ' pessoa na sala' : ' pessoas na sala');
       renderMembers(list);
       syncVolumes();
-      renderRoomTab();
-      renderQueue();
-    } else {
-      S.rpTab = 'room';
-      S.qSig = '';
     }
+    renderRoomTab();
+    renderQueue();
     renderVoice();
     sendToFrameRaw({ type: 'roomOn', on: on });
   }
@@ -419,7 +416,7 @@
     if (!info) return;
     info.start = Math.max(0, Math.floor(r.target));
     S.remoteLoad = true;                                             // veio da sala: nao devolve para a sala
-    try { play(info); } finally { S.remoteLoad = false; }
+    try { play(info, r.by === 'queue'); } finally { S.remoteLoad = false; }   // o proximo da fila nao tira ninguem da pesquisa
   };
 
   setInterval(function () {                                          // o relogio do servidor muda devagar
@@ -474,13 +471,17 @@
     };
   }
 
-  /* ---------- fila de videos da sala ---------- */
+  /* ---------- fila de videos: a da sala (todos veem) quando se esta numa sala, senao a SUA (neste computador) ---------- */
 
-  function queueTabOpen() { return !$('roomPanel').hidden && S.rpTab === 'queue' && !!Room.code(); }
+  function queueTabOpen() { return !$('roomPanel').hidden && S.rpTab === 'queue'; }
 
+  // o que cada aba mostra: Sala = criar/entrar (fora da sala) ou os detalhes da sala; Fila = a fila que vale agora
   function renderRoomTab() {
     var q = S.rpTab === 'queue';
+    var on = !!Room.code();
     $('roomPanel').classList.toggle('q-on', q);
+    $('rpOut').hidden = q || on;
+    $('rpIn').hidden = q || !on;
     $('rpPaneRoom').hidden = q;
     $('rpPaneQueue').hidden = !q;
     $('rpTabRoom').classList.toggle('on', !q);
@@ -499,6 +500,51 @@
       setTimeout(function () { if (queueTabOpen() && !S.qDrag) $('rpQInput').focus(); }, 30);
     }
     else renderRoom();
+  }
+
+  // ---- as operacoes valem para a fila de agora (sala: pelo servidor; fora da sala: guardada neste computador) ----
+
+  function qItems() { return Room.code() ? Room.queue() : window.LMQueue.items(); }
+
+  function qIsLocal() { return !Room.code(); }
+
+  // toca um item tirado da SUA fila (se estava pesquisando, o video toca por tras sem tirar a pessoa da pesquisa)
+  function playQueued(it, announce) {
+    var info = window.LMLink.parse('https://youtu.be/' + it.vid);
+    if (!info) return false;
+    play(info, S.mode !== 'player');
+    S.fromQueue = it.vid;                                            // (depois do play: ele zera isto para o que a pessoa escolhe)
+    if (announce) toast('Próximo da fila: ' + qTitle(it));
+    return true;
+  }
+
+  // o video acabou (ou nao tocou) e ha item na SUA fila: toca o primeiro (devolve o item, ou null se a fila estava vazia)
+  function localAdvance(announce) {
+    var it = window.LMQueue.shift();
+    if (!it) { S.qIdle = true; return null; }
+    return playQueued(it, announce) ? it : null;
+  }
+
+  // false = nao deu (fila cheia, sala reconectando); os avisos ao usuario saem daqui ou do servidor (na sala)
+  function qAdd(vid, title) {
+    if (!qIsLocal()) return Room.qAdd(vid, title);
+    if (window.LMQueue.isFull()) { toast('A fila está cheia (' + window.LMQueue.MAX + ' vídeos)'); return false; }
+    if (!window.LMQueue.add(vid, title)) return false;
+    if (S.qIdle) {                                                     // com o player parado, o que entra ja comeca a tocar
+      var first = localAdvance(false);
+      if (first) { toast('Tocando agora: ' + qTitle(first)); return true; }
+    }
+    toast('Adicionado à sua fila (' + window.LMQueue.count() + ')');
+    return true;
+  }
+
+  function qMove(id, to) { if (qIsLocal()) window.LMQueue.move(id, to); else Room.qMove(id, to); }
+  function qRemove(id) { if (qIsLocal()) window.LMQueue.remove(id); else Room.qRemove(id); }
+  function qClear() { if (qIsLocal()) window.LMQueue.clear(); else Room.qClear(); }
+  function qPlay(id) {
+    if (!qIsLocal()) { Room.qPlay(id); return; }
+    var it = window.LMQueue.take(id);
+    if (it) playQueued(it, false);
   }
 
   function qTitle(it) { return it.title || ('youtu.be/' + it.vid); }
@@ -526,7 +572,7 @@
     li.appendChild(tx);
     var pl = el('button', 'ib qplay');
     pl.type = 'button';
-    pl.title = 'Tocar agora (para todos na sala)';
+    pl.title = qIsLocal() ? 'Tocar agora' : 'Tocar agora (para todos na sala)';
     pl.setAttribute('aria-label', 'Tocar agora: ' + qTitle(it));
     pl.appendChild(icon('i-play'));
     li.appendChild(pl);
@@ -539,17 +585,23 @@
     return li;
   }
 
-  // desenha a fila (titulos vem de outras pessoas: sempre como texto, nunca como HTML)
+  // desenha a fila de agora (titulos vem de outras pessoas: sempre como texto, nunca como HTML)
   function renderQueue(force) {
     if (S.qDrag) { S.qDirty = true; return; }
-    var q = Room.queue();
+    var local = qIsLocal();
+    var q = qItems();
     var n = q.length;
-    var sig = JSON.stringify(q);
+    var sig = (local ? 'L' : 'R') + JSON.stringify(q);
     var b = $('rpQCount');
     b.hidden = !n;
     b.textContent = String(n);
+    var pb = $('bRoomQ');                                              // numero de videos na fila, no botao da barra
+    pb.hidden = !n;
+    pb.textContent = n > 9 ? '9+' : String(n);
     if (!force && sig === S.qSig) return;
     S.qSig = sig;
+    $('rpQWho').textContent = local ? 'Sua fila · só neste computador' : 'Fila da sala · todos veem a mesma';
+    $('rpQWho').title = local ? 'Fica guardada aqui, mesmo se você fechar o programa. Quando você entra numa sala, aparece a fila da sala.' : 'Qualquer pessoa da sala adiciona, muda a ordem ou tira. Quando você sai da sala, volta a sua fila.';
     var ul = $('rpQList');
     var focusId = S.qFocus;
     S.qFocus = null;
@@ -576,7 +628,7 @@
     function go(title) {
       if (done) return;
       done = true;
-      if (!Room.qAdd(info.id, title || '')) roomMsg('A sala está reconectando… tente de novo.');
+      if (!qAdd(info.id, title || '') && !qIsLocal()) roomMsg('A sala está reconectando… tente de novo.');
     }
     var timer = setTimeout(function () { go(''); }, 2500);
     if (ytAvailable()) {
@@ -595,6 +647,8 @@
     else if (ev.k === 'next') toast('Próximo da fila: ' + t);
   };
 
+  window.LMQueue.onChange(function () { if (qIsLocal()) renderQueue(); });      // a SUA fila mudou (aqui ou em outra janela do programa)
+
   $('rpTabRoom').addEventListener('click', function () { setRoomTab('room'); });
   $('rpTabQueue').addEventListener('click', function () { setRoomTab('queue'); });
   $('rpQForm').addEventListener('submit', function (e) {
@@ -606,26 +660,26 @@
   $('rpQInput').addEventListener('paste', function () {              // colou um link: entra na fila na hora (como no campo da tela de link)
     setTimeout(function () { var v = $('rpQInput').value; if (v.trim() && window.LMLink.parse(v) && addLinkToQueue(v)) $('rpQInput').value = ''; }, 0);
   });
-  $('rpQClear').addEventListener('click', function () { Room.qClear(); });
+  $('rpQClear').addEventListener('click', function () { qClear(); });
   $('rpQList').addEventListener('click', function (e) {
     var li = e.target.closest ? e.target.closest('.qi') : null;
     if (!li) return;
     var id = li.getAttribute('data-qid');
-    if (e.target.closest('.qplay')) Room.qPlay(id);
-    else if (e.target.closest('.qrm')) Room.qRemove(id);
+    if (e.target.closest('.qplay')) qPlay(id);
+    else if (e.target.closest('.qrm')) qRemove(id);
   });
   $('rpQList').addEventListener('keydown', function (e) {             // alternativa ao mouse: seta para cima/baixo no cabo da linha
     var g = e.target.closest ? e.target.closest('.qgrip') : null;
     if (!g || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     var id = g.closest('.qi').getAttribute('data-qid');
-    var q = Room.queue();
+    var q = qItems();
     var i = -1;
     for (var k = 0; k < q.length; k++) if (q[k].id === id) i = k;
     var to = i + (e.key === 'ArrowUp' ? -1 : 1);
     if (i < 0 || to < 0 || to >= q.length) return;
     e.preventDefault();
     S.qFocus = id;
-    Room.qMove(id, to);
+    qMove(id, to);
   });
 
   // arrastar para reordenar (mouse ou toque): a linha acompanha o ponteiro, as outras abrem espaco, e ao soltar o servidor confirma
@@ -673,8 +727,8 @@
     d.rows.forEach(function (r) { r.style.transform = ''; });
     if (!cancel && d.to !== d.from) {
       var after = d.rows.filter(function (r) { return r !== d.li; })[d.to];
-      d.ul.insertBefore(d.li, after || null);                         // ja mostra a ordem nova (o servidor confirma logo em seguida)
-      Room.qMove(d.id, d.to);
+      d.ul.insertBefore(d.li, after || null);                         // ja mostra a ordem nova (na sala o servidor confirma logo em seguida)
+      qMove(d.id, d.to);
     }
     if (S.qDirty) { S.qDirty = false; renderQueue(true); }
   }
@@ -953,10 +1007,11 @@
     if (info) play(info);
   }
 
+  // o + de um resultado: vai para a fila de agora (na sala, a da sala; fora dela, a SUA)
   function queueResult(it, li) {
-    if (!Room.code()) { toast('A fila é da sala: crie ou entre numa sala para usar'); return; }
-    if (Room.status() !== 'ok') { toast('A sala está reconectando… tente de novo'); return; }
-    Room.qAdd(it.id, it.title);
+    if (Room.code() && Room.status() !== 'ok') { toast('A sala está reconectando… tente de novo'); return; }
+    if (!qAdd(it.id, it.title)) return;
+    if (qIsLocal()) S.rpTab = 'queue';                               // da proxima vez o painel abre na fila
     if (li) { li.classList.add('queued'); setTimeout(function () { li.classList.remove('queued'); }, 1400); }
   }
 
@@ -1004,11 +1059,14 @@
 
   /* ---------- player do YouTube ---------- */
 
-  function play(info) {
+  // stay: o video do proximo da fila toca por tras sem tirar a pessoa da pesquisa (o audio continua)
+  function play(info, stay) {
     S.current = info;
+    S.qIdle = false;                                                 // tem video tocando: a fila so comeca sozinha quando ele acabar
+    S.fromQueue = null;                                              // (playQueued marca de novo logo depois, se foi a fila que escolheu)
     if (!S.remoteLoad && Room.code()) Room.publishLoad(info);        // numa sala, trocar de video troca para todos
     clearError();
-    if (S.mode !== 'player') { setMode('player'); toHost('mod:player'); }   // tocou um link: sai da busca
+    if (S.mode !== 'player' && !stay) { setMode('player'); toHost('mod:player'); }   // tocou um link: sai da busca
     $('url').value = '';
     $('goText').textContent = 'Reproduzir';
     body.classList.remove('empty', 'home');
@@ -1088,10 +1146,12 @@
     if (e && (e.data === 1 || e.data === 3 || e.data === 5)) updateTitleFromPlayer();
   }
 
-  // o video acabou: numa sala passa para o proximo da fila (varias pessoas pedem ao mesmo tempo, so a primeira vale)
+  // o video acabou: passa para o proximo da fila. Na sala varias pessoas pedem ao mesmo tempo e so a primeira vale;
+  // fora dela e a SUA fila, neste computador.
   function onVideoEnded() {
-    if (!Room.code() || !S.current || S.current.list) return;       // lista do YouTube passa sozinha de um video para o outro
-    Room.qNext();
+    if (!S.current || S.current.list) return;                       // lista do YouTube passa sozinha de um video para o outro
+    if (Room.code()) { Room.qNext(); return; }
+    localAdvance(true);                                              // (fila vazia: o player fica parado e o proximo que entrar comeca a tocar)
   }
 
   function updateTitleFromPlayer() {
@@ -1109,6 +1169,13 @@
     else if (code === 2) kind = 'badlink';
     else if (code === 5) kind = 'html5';
     else if (code === 152 || code === 153) kind = 'refused';
+    // um video da SUA fila que nao pode tocar aqui (bloqueado, removido): passa para o proximo em vez de parar a fila
+    if ((kind === 'embed' || kind === 'gone' || kind === 'badlink') && !Room.code() && S.current && S.fromQueue && S.current.id === S.fromQueue && window.LMQueue.count() > 0) {
+      var bad = S.fromQueue;
+      var next = localAdvance(false);
+      if (next) { toast('Esse vídeo não toca aqui, passei para o próximo: ' + qTitle(next)); return; }
+      S.fromQueue = bad;
+    }
     showError(kind, code);
   }
 
