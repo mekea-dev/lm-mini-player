@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes da tela inicial…</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; background: #111; color: #eee; padding: 1rem 1.5rem; }
+  code { background: #222; padding: .1em .4em; border-radius: 4px; }
+  .ok { color: #5ee0a0; } .bad { color: #ff6a5e; }
+  li { margin: .15rem 0; }
+  iframe { position: absolute; left: -9999px; top: 0; border: 0; }
+</style>
+</head>
+<body>
+<h1>Tela inicial (<code>web/index.html</code> sem video)</h1>
+<p>Abre a tela inicial em varios tamanhos de janela e confere que os atalhos (Colar link, Explorar YouTube, Spotify, Sala e fila) ficam numa linha so
+e que o conteudo cabe na janela <b>sem barra de rolagem</b> nos tamanhos normais (a partir de 480 x 270). Na pasta do projeto:
+<code>python -m http.server 8000</code>; depois abra <code>http://localhost:8000/tests/home-test.html</code>.</p>
+<h2 id="resumo">rodando…</h2>
+<ul id="lista"></ul>
+<iframe id="f" src="../web/index.html"></iframe>
+<script>
+(function () {
+  var results = [];
+  function check(name, cond, extra) { results.push({ name: name, ok: !!cond, extra: cond ? undefined : extra }); }
+
+  function frameReady(f) {
+    return new Promise(function (res) {
+      var w = f.contentWindow;
+      if (w && w.__lm && w.document.readyState === 'complete') { res(); return; }
+      f.addEventListener('load', function () { setTimeout(res, 50); }, { once: true });
+    });
+  }
+
+  function measure(win) {
+    var d = win.document;
+    var alt = d.querySelector('.alt');
+    var btns = [].slice.call(alt.querySelectorAll('.btn'));
+    var tops = btns.map(function (b) { return Math.round(b.getBoundingClientRect().top); });
+    var oneRow = tops.every(function (t) { return Math.abs(t - tops[0]) < 3; });
+    var home = d.getElementById('home');
+    return { oneRow: oneRow, scroll: home.scrollHeight > home.clientHeight + 1, over: home.scrollHeight - home.clientHeight };
+  }
+
+  function run() {
+    var f = document.getElementById('f');
+    var win = f.contentWindow;
+    var rowProblems = [], scrollProblems = [];
+    var sizes = [];
+    for (var W = 700; W >= 240; W -= 20) sizes.push(W);
+    sizes.forEach(function (W) {
+      // altura proporcional ao padrao (16:9 + a barra), como o usuario deixa a janela
+      var H = Math.max(135, Math.round(W * 9 / 16));
+      f.style.width = W + 'px';
+      f.style.height = H + 'px';
+      win.document.body.className = 'empty ui';
+      var m = measure(win);
+      if (!m.oneRow) rowProblems.push(W + 'x' + H);
+      if (W >= 480 && m.scroll) scrollProblems.push(W + 'x' + H + ' (passa ' + m.over + ' px)');
+    });
+    check('os 4 atalhos ficam numa linha so de 700 a 240 px de largura', rowProblems.length === 0, rowProblems);
+    check('de 480 px para cima o conteudo da tela inicial cabe sem rolar', scrollProblems.length === 0, scrollProblems);
+    // tamanho padrao do programa
+    f.style.width = '480px'; f.style.height = '270px';
+    win.document.body.className = 'empty ui';
+    var m = measure(win);
+    check('tamanho padrao (480 x 270): uma linha de atalhos e sem rolagem', m.oneRow && !m.scroll, m);
+  }
+
+  function finish() {
+    var passed = results.filter(function (q) { return q.ok; }).length, failed = results.length - passed;
+    var lista = document.getElementById('lista');
+    results.forEach(function (q) {
+      var li = document.createElement('li');
+      li.className = q.ok ? 'ok' : 'bad';
+      li.textContent = (q.ok ? 'OK  ' : 'FALHOU  ') + q.name + (q.ok ? '' : '  ->  ' + JSON.stringify(q.extra));
+      lista.appendChild(li);
+    });
+    var resumo = document.getElementById('resumo');
+    resumo.textContent = (failed ? 'FALHOU ' : 'OK ') + passed + '/' + results.length;
+    resumo.className = failed ? 'bad' : 'ok';
+    document.title = resumo.textContent;
+  }
+
+  var f = document.getElementById('f');
+  frameReady(f).then(function () { try { run(); } catch (e) { check('o teste rodou sem erro', false, String(e && e.stack || e)); } finish(); });
+})();
+</script>
+</body>
+</html>

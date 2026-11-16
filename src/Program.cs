@@ -24,8 +24,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.6.0.0")]
-[assembly: AssemblyFileVersion("1.6.0.0")]
+[assembly: AssemblyVersion("1.7.0.0")]
+[assembly: AssemblyFileVersion("1.7.0.0")]
 
 namespace LMMiniPlayer
 {
@@ -96,6 +96,7 @@ namespace LMMiniPlayer
         [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
         [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
         [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
         [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     }
 
@@ -138,7 +139,7 @@ namespace LMMiniPlayer
                         case "update": s.AutoUpdate = v != "0"; break;
                         case "opacity":
                             if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out d))
-                                s.Opacity = Math.Max(0.25, Math.Min(1.0, d));
+                                s.Opacity = Math.Max(MainForm.MinOpacity, Math.Min(1.0, d));
                             break;
                     }
                 }
@@ -182,7 +183,7 @@ namespace LMMiniPlayer
         public IntPtr Hwnd;                     // a janela filha do formulario que hospeda este WebView2 (para trazer ao topo)
     }
 
-    sealed class MainForm : Form
+    sealed partial class MainForm : Form
     {
         const string VHost = "lmminiplayer.app";                       // nome virtual: aponta para a pasta web\
         const string HomeUrl = "https://" + VHost + "/index.html";
@@ -230,6 +231,7 @@ namespace LMMiniPlayer
         Version updateVersion;                                         // versao nova que o GitHub anunciou (null = nenhuma)
         string updatePage;                                             // pagina do release (botao "Baixar")
         readonly bool startMinimized;                                  // aberto com --minimized
+        ThumbBar thumb;                                                // botoes da miniatura da barra de tarefas (veja Taskbar.cs)
 
         public MainForm(string[] args)
         {
@@ -255,8 +257,10 @@ namespace LMMiniPlayer
             float scale = DpiScale();
             MinimumSize = new Size((int)(240 * scale), (int)(135 * scale));
             Bounds = InitialBounds(scale);
+            if (testMode) TestBounds();
             TopMost = pinned;
-            Opacity = cfg.Opacity;
+            userOpacity = cfg.Opacity;
+            Opacity = IsGhost ? 1.0 : userOpacity;                         // fantasma abre inteiro: a janela so some depois que a pagina carrega e o video toca
             if (startMinimized) WindowState = FormWindowState.Minimized;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
@@ -266,8 +270,14 @@ namespace LMMiniPlayer
             hoverTimer.Tick += OnHoverTick;
             gestureTimer.Interval = 10;
             gestureTimer.Tick += OnGestureTick;
+            fadeTimer.Interval = 15;
+            fadeTimer.Tick += OnFade;
 
-            SizeChanged += delegate { FitController(); };
+            thumb = new ThumbBar();
+            thumb.Clicked += delegate(string action) { Send("tb:" + action); };
+
+            SizeChanged += delegate { FitController(); PlaceHandle(); };
+            LocationChanged += delegate { PlaceHandle(); };
             Activated += delegate
             {
                 CoreWebView2Controller c = (activeModule != null && activeModule.Controller != null) ? activeModule.Controller : controller;
@@ -288,6 +298,13 @@ namespace LMMiniPlayer
                 cp.Style |= 0x00020000;   // WS_MINIMIZEBOX: o botao da barra de tarefas consegue minimizar a janela
                 return cp;
             }
+        }
+
+        // a barra de tarefas avisa dos botoes da miniatura (criou o botao da janela, clicaram num botao...)
+        protected override void WndProc(ref Message m)
+        {
+            if (thumb != null && thumb.HandleMessage(ref m)) return;
+            base.WndProc(ref m);
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -331,6 +348,7 @@ namespace LMMiniPlayer
             SaveSettings();
             hoverTimer.Stop();
             gestureTimer.Stop();
+            fadeTimer.Stop();
             base.OnFormClosing(e);
         }
 
@@ -345,6 +363,8 @@ namespace LMMiniPlayer
                 try { controller.Close(); } catch { }
                 controller = null;
             }
+            if (handle != null) { try { handle.Close(); } catch { } handle = null; }
+            if (thumb != null) { thumb.Dispose(); thumb = null; }
             base.OnFormClosed(e);
         }
 
@@ -405,7 +425,7 @@ namespace LMMiniPlayer
                 cfg.H = Height;
             }
             cfg.Pin = pinned;
-            cfg.Opacity = Opacity;
+            cfg.Opacity = userOpacity;
             cfg.Save();
         }
 
@@ -427,8 +447,8 @@ namespace LMMiniPlayer
                 if (activeModule != null && activeModule.Controller != null)
                 {
                     activeModule.Controller.Bounds = ModuleBounds();
-                    activeModule.Controller.IsVisible = true;
-                    RaiseModule(activeModule);
+                    activeModule.Controller.IsVisible = !menuOpen;          // com o menu aberto o site sai da frente (o menu e da pagina)
+                    if (!menuOpen) RaiseModule(activeModule);
                 }
             }
             catch { }
@@ -550,7 +570,7 @@ namespace LMMiniPlayer
             {
                 case "ready":
                     pageReady = true;
-                    Send("cfg:pin=" + (pinned ? "1" : "0") + ";op=" + Opacity.ToString("0.##", CultureInfo.InvariantCulture));
+                    Send("cfg:pin=" + (pinned ? "1" : "0") + ";op=" + userOpacity.ToString("0.##", CultureInfo.InvariantCulture));
                     if (startText != null) Send("url:" + startText);
                     lastMove = Environment.TickCount;
                     hoverTimer.Start();
@@ -564,11 +584,23 @@ namespace LMMiniPlayer
                     pinned = arg == "1";
                     if (!fullscreen) TopMost = pinned;
                     break;
-                case "op":
+                case "op":                                                  // transparencia (barra do menu): 0.10 a 1
                     double v;
-                    if (double.TryParse(arg, NumberStyles.Float, CultureInfo.InvariantCulture, out v))
-                        Opacity = Math.Max(0.25, Math.Min(1.0, v));
+                    if (double.TryParse(arg, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) SetUserOpacity(v, Environment.TickCount);
                     break;
+                case "opdrag":                                              // a barra de transparencia esta sendo arrastada (1) ou foi solta (0)
+                    sliderDrag = arg == "1";
+                    previewAt = Environment.TickCount;
+                    previewSet = true;
+                    ApplyOpacity(previewAt, true);
+                    break;
+                case "menu": OnMenuState(arg == "1"); break;                // menu suspenso aberto/fechado
+                case "ov":                                                  // ha uma tela do programa por cima do video: a janela aparece inteira
+                    overlay = arg == "1";
+                    ApplyOpacity(Environment.TickCount, false);
+                    break;
+                case "tbs": if (thumb != null) thumb.SetState(TbState.Parse(arg)); break;   // estado dos botoes da miniatura da barra de tarefas
+                case "dbg": HandleDebug(arg); break;                        // so com LMMP_TEST=1
                 case "paste": Send("url:" + ReadClipboard()); break;
                 case "typing": typing = arg == "1"; break;
                 case "open": OpenExternal(arg); break;
@@ -981,12 +1013,20 @@ namespace LMMiniPlayer
         {
             if (!pageReady) return;
 
-            Point c = Cursor.Position;
-            if (c != lastCursor) { lastCursor = c; lastMove = Environment.TickCount; }
+            int now = Environment.TickCount;
+            bool real = !testCursor.HasValue;                              // (nos testes o mouse e virtual)
+            Point c = real ? Cursor.Position : testCursor.Value;
+            if (c != lastCursor) { lastCursor = c; lastMove = now; }
 
-            bool inside = Visible && WindowState != FormWindowState.Minimized && Bounds.Contains(c) && OwnsPointAt(c);
-            bool recent = unchecked(Environment.TickCount - lastMove) < IdleHideMs;
+            bool shown = Visible && WindowState != FormWindowState.Minimized;
+            bool onHandle = handle != null && handle.Visible && handle.Bounds.Contains(c) && (!real || OwnsPointAt(c));
+            bool inside = onHandle || (shown && Bounds.Contains(c) && (!real || OwnsPointAt(c)));
+            bool recent = unchecked(now - lastMove) < IdleHideMs;
+
+            GhostTick(now, inside, onHandle);                              // modo fantasma: revela, esmaece, alca, menu esquecido
+
             bool active = gesture != null || (inside && recent);
+            if (!GhostShown(now)) active = false;                          // fantasma escondido: a barra so aparece depois de passar o mouse na alca
 
             if (active != lastActive)
             {
@@ -1003,7 +1043,8 @@ namespace LMMiniPlayer
                 Native.POINT np; np.X = p.X; np.Y = p.Y;
                 IntPtr h = Native.WindowFromPoint(np);
                 if (h == IntPtr.Zero) return false;
-                return Native.GetAncestor(h, 2) == Handle;                  // GA_ROOT
+                IntPtr root = Native.GetAncestor(h, 2);                     // GA_ROOT
+                return root == Handle || (handle != null && root == handle.Handle);       // a alca do modo fantasma tambem e nossa
             }
             catch { return true; }
         }

@@ -96,6 +96,15 @@
     <symbol id="i-check" viewBox="0 0 24 24">
       <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24">
+      <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></g>
+    </symbol>
+    <symbol id="i-headphones-off" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/><path d="m2 2 20 20"/></g>
+    </symbol>
   </defs>
 </svg>
 
@@ -114,7 +123,7 @@
     </form>
     <div class="alt">
       <button type="button" class="btn ghost" id="pasteHome" title="Colar o link copiado"><svg class="i"><use href="#i-clip"/></svg><span>Colar link</span></button>
-      <button type="button" class="btn ghost" id="modYoutube" title="Explorar o YouTube aqui dentro"><svg class="i"><use href="#i-search"/></svg><span>Explorar YouTube</span></button>
+      <button type="button" class="btn ghost" id="modYoutube" title="Explorar o YouTube aqui dentro"><svg class="i"><use href="#i-search"/></svg><span>YouTube</span></button>
       <button type="button" class="btn ghost" id="modSpotify" title="Abrir o Spotify aqui dentro"><svg class="i"><use href="#i-music"/></svg><span>Spotify</span></button>
       <button type="button" class="btn ghost" id="roomHome" title="Sala (ver o mesmo vídeo junto com outras pessoas) e fila de vídeos"><svg class="i"><use href="#i-users"/></svg><span>Sala e fila</span></button>
     </div>
@@ -139,6 +148,7 @@
 
 <!-- Barra de cima: aparece quando o mouse mexe sobre a janela -->
 <header id="bar" class="bar">
+  <button type="button" class="ib" id="bMenu" title="Menu: transparência e mais" aria-label="Menu" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-menu"/></svg></button>
   <div id="drag" class="drag" title="Arraste para mover a janela">
     <svg class="i grip"><use href="#i-grip"/></svg>
     <span id="ttl" class="ttl">LM Mini Player</span>
@@ -147,7 +157,6 @@
   <button type="button" class="ib" id="bLink" title="Pesquisar ou colar link (Ctrl+L)" aria-label="Pesquisar ou colar link"><svg class="i"><use href="#i-search"/></svg></button>
   <button type="button" class="ib" id="bRoom" title="Sala e fila de vídeos" aria-label="Sala e fila"><svg class="i"><use href="#i-users"/></svg><span class="qb" id="bRoomQ" hidden>0</span></button>
   <button type="button" class="ib" id="bMic" hidden title="Entrar na voz" aria-label="Microfone"><svg class="i"><use href="#i-mic"/></svg></button>
-  <button type="button" class="ib" id="bOp"    title="Transparência da janela" aria-label="Transparência da janela"><svg class="i"><use href="#i-opacity"/></svg></button>
   <button type="button" class="ib on" id="bPin" title="Sempre por cima das outras janelas" aria-label="Sempre por cima" aria-pressed="true"><svg class="i"><use href="#i-pin"/></svg></button>
   <button type="button" class="ib" id="bMin"   title="Minimizar" aria-label="Minimizar"><svg class="i"><use href="#i-min"/></svg></button>
   <button type="button" class="ib danger" id="bClose" title="Fechar" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
@@ -155,6 +164,7 @@
 
 <!-- Barra do modo navegacao (busca do YouTube, Spotify): o site aparece numa janela por baixo dela -->
 <header id="browseBar" class="browsebar">
+  <button type="button" class="ib" id="mMenu" title="Menu: transparência e mais" aria-label="Menu" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-menu"/></svg></button>
   <button type="button" class="ib" id="mBack" title="Voltar ao player" aria-label="Voltar ao player"><svg class="i"><use href="#i-back"/></svg></button>
   <button type="button" class="tab" id="tabYoutube" title="Explorar e pesquisar no YouTube"><svg class="i"><use href="#i-search"/></svg><span>YouTube</span></button>
   <button type="button" class="tab" id="tabSpotify" title="Spotify"><svg class="i"><use href="#i-music"/></svg><span>Spotify</span></button>
@@ -169,6 +179,28 @@
   <button type="button" class="ib danger" id="mClose" title="Fechar" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button>
 </header>
 <div id="modLoading">Abrindo…</div>
+
+<!-- Menu suspenso (botao ≡ da barra): transparencia e as acoes que nao cabem na barra em janelas pequenas -->
+<div id="menu" class="menu" hidden role="menu" aria-label="Menu">
+  <div class="mn-op">
+    <div class="mn-h"><svg class="i"><use href="#i-opacity"/></svg><span>Transparência</span><b id="mnOpVal">100%</b></div>
+    <input id="mnOp" class="mn-range" type="range" min="10" max="100" step="1" value="100" aria-label="Transparência da janela, de 10 a 100 por cento">
+    <p class="mn-hint" id="mnHint">Com 50% ou menos a janela some e só a alça ≡ fica no canto. Passe o mouse nela para ver tudo.</p>
+  </div>
+  <div class="mn-op mn-vol" id="mnVolBox">
+    <div class="mn-h">
+      <button type="button" class="mn-mute" id="mnMute" title="Ligar ou desligar o som do vídeo" aria-label="Som do vídeo"><svg class="i"><use href="#i-volume"/></svg></button>
+      <span>Volume do vídeo</span><b id="mnVolVal">100%</b>
+    </div>
+    <input id="mnVol" class="mn-range" type="range" min="0" max="100" step="1" value="100" aria-label="Volume do vídeo, de 0 a 100 por cento">
+  </div>
+  <button type="button" class="mn-i" id="mnSearch" role="menuitem"><svg class="i"><use href="#i-search"/></svg><span>Pesquisar ou colar link</span><kbd>Ctrl L</kbd></button>
+  <button type="button" class="mn-i" id="mnRoom" role="menuitem"><svg class="i"><use href="#i-users"/></svg><span>Sala e fila</span><b class="mn-q" id="mnRoomQ" hidden>0</b></button>
+  <button type="button" class="mn-i" id="mnMic" role="menuitem" hidden><svg class="i"><use href="#i-mic"/></svg><span id="mnMicText">Entrar na voz</span></button>
+  <button type="button" class="mn-i" id="mnHear" role="menuitemcheckbox" aria-checked="true" hidden><svg class="i"><use href="#i-headphones"/></svg><span id="mnHearText">Ouvir as vozes</span></button>
+  <button type="button" class="mn-i" id="mnSpeed" role="menuitem" hidden><span class="mn-sp" id="mnSpeedVal">1×</span><span>Voltar à velocidade 1×</span></button>
+  <button type="button" class="mn-i" id="mnPin" role="menuitemcheckbox" aria-checked="true"><svg class="i"><use href="#i-pin"/></svg><span>Sempre por cima</span><svg class="i mn-ck"><use href="#i-check"/></svg></button>
+</div>
 
 <!-- Resultados da pesquisa do YouTube (lista do programa, com + para a fila da sala) -->
 <section id="results" class="results" aria-label="Resultados da pesquisa">
@@ -221,6 +253,7 @@
         <ul class="rp-members" id="rpMembers"></ul>
         <div class="rp-voice">
           <button type="button" class="btn" id="rpMic"><svg class="i"><use href="#i-mic"/></svg><span id="rpMicText">Entrar na voz</span></button>
+          <button type="button" class="btn" id="rpHear" hidden title="Ouvir as pessoas da sala (desligue para ficar sem ouvir as vozes)"><svg class="i"><use href="#i-headphones"/></svg><span id="rpHearText">Ouvir as vozes</span></button>
           <button type="button" class="btn ghost" id="rpVoiceOff" hidden>Sair da voz</button>
         </div>
         <div class="rp-vols">

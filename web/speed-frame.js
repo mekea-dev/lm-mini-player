@@ -14,6 +14,11 @@
  * A pagina do mini player repassa essas teclas para ca (mensagens "lmmp") quando o
  * foco esta fora do video, e recebe daqui a velocidade atual para mostrar na barra.
  * A ultima velocidade fica guardada e vale para o proximo video.
+ *
+ * Tambem some com o controle de VOLUME do proprio YouTube (o icone de mudo e a barrinha vertical
+ * no canto de cima do player), que ficava ruim de usar numa janela pequena: o volume agora e
+ * ajustado pelo botao de volume da barra do programa. So o visual some: as teclas do YouTube
+ * (M, setas para cima e para baixo) continuam valendo.
  */
 (function () {
   'use strict';
@@ -24,6 +29,31 @@
     if (!/(^|\.)youtube(-nocookie)?\.com$/i.test(location.hostname)) return;
     if (location.pathname.indexOf('/embed/') !== 0) return;
   } catch (e) { return; }
+
+  // Controle de volume do YouTube: no player atual e o elemento <volume-controls> (botao de mudo + barra vertical);
+  // os outros seletores cobrem o desenho antigo (barra de baixo). O aviso "toque para ativar o som" (.ytp-unmute)
+  // NAO sai: ele so aparece quando o navegador barra o som no inicio.
+  var HIDE_VOLUME_CSS =
+    'volume-controls, .ytdVolumeControlsHost, .ytp-volume-area, .ytp-volume-panel, .ytp-mute-button { display: none !important; }';
+
+  function hideYoutubeVolume() {
+    // folha de estilo "adotada": vale no documento mesmo antes de existir <head> (o script roda na criacao do documento)
+    try {
+      var sheet = new CSSStyleSheet();
+      sheet.replaceSync(HIDE_VOLUME_CSS);
+      document.adoptedStyleSheets = Array.prototype.slice.call(document.adoptedStyleSheets).concat([sheet]);
+      return;
+    } catch (e) { /* navegador sem folhas adotadas: cai no <style> abaixo */ }
+    var put = function () {
+      if (document.getElementById('lm-hide-volume')) return;
+      var s = document.createElement('style');
+      s.id = 'lm-hide-volume';
+      s.textContent = HIDE_VOLUME_CSS;
+      (document.head || document.documentElement).appendChild(s);
+    };
+    if (document.documentElement) put(); else document.addEventListener('DOMContentLoaded', put);
+  }
+  hideYoutubeVolume();
 
   var PARENT = 'https://lmminiplayer.app';       // so a pagina do mini player pode mandar comandos
   var MIN = 0.07, MAX = 16;

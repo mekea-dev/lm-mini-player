@@ -190,11 +190,11 @@ body.err #err { display: flex; }
   top: 8px;
   left: 8px;
   height: 32px;
-  max-width: calc(100% - 184px);        /* sobra espaco a direita para mudo + legendas + engrenagem do YouTube */
+  max-width: calc(100% - 136px);        /* sobra espaco a direita para legendas + engrenagem do YouTube (o volume dele fica escondido: veja speed-frame.js) */
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 4px 0 2px;
+  padding: 0 4px 0 0;                   /* sem folga a esquerda: o botao ≡ fica sob a alca do modo fantasma (veja Ghost.cs) */
   overflow: hidden;
   background: rgba(12, 12, 18, .95);
   border: 1px solid var(--line-hi);
@@ -212,6 +212,7 @@ body.empty .bar, body.home .bar, body.err .bar {
   right: 0;
   height: var(--bar-h);
   max-width: none;
+  padding-left: 6px;                    /* o botao ≡ nao fica sob a alca de redimensionar da borda */
   background: linear-gradient(180deg, rgba(8, 8, 12, .99), rgba(8, 8, 12, .95));
   border: 0;
   border-bottom: 1px solid var(--line);
@@ -219,7 +220,7 @@ body.empty .bar, body.home .bar, body.err .bar {
   box-shadow: none;
 }
 
-.drag { flex: 1; min-width: 52px; height: 100%; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; }
+.drag { flex: 1; min-width: 40px; height: 100%; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; }
 .grip { width: 16px; height: 16px; color: #6d6d7e; }
 .ttl {
   flex: 1;
@@ -250,6 +251,8 @@ body.empty .bar, body.home .bar, body.err .bar {
 .ib:hover { background: rgba(255, 255, 255, .13); color: #fff; }
 .ib.on { color: var(--accent-hi); }
 .ib.danger:hover { background: #e5484d; color: #fff; }
+.ib[aria-expanded="true"] { background: rgba(255, 255, 255, .16); color: #fff; }
+.bar .ib { width: 28px; }                 /* botoes da pilula: do mesmo tamanho em qualquer largura (assim nenhum botao some e volta ao redimensionar) */
 
 /* selo com a velocidade (so aparece quando nao e 1x) */
 .chip {
@@ -266,6 +269,71 @@ body.empty .bar, body.home .bar, body.err .bar {
 }
 .chip:hover { background: rgba(255, 74, 67, .42); }
 .chip[hidden] { display: none; }
+
+/* ---------- menu suspenso (botao ≡ da barra) ---------- */
+/* Transparencia (barra de 10 a 100%) e as acoes que a barra deixa de mostrar quando a janela e pequena.
+   Abre por baixo da barra e rola sozinho se a janela for baixa. */
+.menu {
+  position: absolute;
+  z-index: 35;
+  --top: 42px;
+  top: var(--top);
+  left: 8px;
+  width: min(264px, calc(100% - 16px));
+  max-height: calc(100% - var(--top) - 6px);
+  padding: 4px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .28) transparent;
+  background: rgba(14, 14, 20, .985);
+  border: 1px solid var(--line-hi);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .6);
+}
+body.empty .menu, body.home .menu, body.err .menu { --top: calc(var(--bar-h) + 4px); left: 6px; }
+body.browse .menu { --top: calc(var(--browse-h) + 4px); left: 6px; }
+.mn-op { padding: 3px 8px 4px; }
+.mn-h { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #e6e6ee; }
+.mn-h .i { width: 16px; height: 16px; color: #cfcfdb; }
+.mn-h span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mn-h b { font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+.mn-mute { flex: none; width: 24px; height: 22px; margin: -2px -4px -2px -4px; padding: 0; display: grid; place-items: center; color: #cfcfdb; background: transparent; border: 0; border-radius: 7px; cursor: pointer; }
+.mn-mute .i { width: 16px; height: 16px; }
+.mn-mute:hover { background: rgba(255, 255, 255, .13); color: #fff; }
+.mn-mute:focus-visible { outline: 2px solid #8fb3ff; outline-offset: 1px; }
+.mn-vol { padding-top: 2px; }
+.mn-vol .mn-range:disabled { opacity: .4; cursor: default; }
+.mn-range { display: block; width: 100%; height: 18px; margin: 6px 0 0; padding: 0; accent-color: var(--accent-hi); cursor: pointer; }
+.mn-hint { margin: 4px 0 0; font-size: 11px; line-height: 1.35; color: var(--muted); }
+.mn-hint.on { color: #ffcf8a; }
+@media (max-height: 300px) { .mn-hint { display: none; } }
+.mn-i {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  font: 500 13px/1 var(--font);
+  text-align: left;
+  color: #e6e6ee;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mn-i:hover, .mn-i:focus-visible { background: rgba(255, 255, 255, .10); color: #fff; }
+.mn-i:focus-visible, .mn-range:focus-visible { outline: 2px solid #8fb3ff; outline-offset: 1px; }
+.mn-i .i { width: 16px; height: 16px; flex: none; color: #cfcfdb; }
+.mn-i > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mn-i kbd { flex: none; padding: .05em .4em; font-size: 10.5px; color: var(--muted); }
+.mn-i .mn-ck { color: var(--accent-hi); visibility: hidden; }
+.mn-i[aria-checked="true"] .mn-ck { visibility: visible; }
+.mn-i.live .i:first-child { color: #5ee0a0; }
+.mn-i.muted .i:first-child { color: var(--accent-hi); }
+.mn-q { flex: none; min-width: 18px; height: 18px; padding: 0 5px; font: 700 11px/18px var(--font); text-align: center; color: #fff; background: var(--accent); border-radius: 999px; }
+.mn-sp { flex: none !important; min-width: 28px; padding: 3px 6px; font: 700 11px/1 var(--font); text-align: center; color: #fff; background: rgba(255, 74, 67, .24); border: 1px solid rgba(255, 106, 94, .6); border-radius: 999px; }
+body.browse #mnRoom { display: none; }
 
 /* ---------- modo navegacao (busca do YouTube, Spotify) ---------- */
 /* O video continua tocando aqui por baixo; o programa mostra o site numa janela (WebView2) que cobre a
@@ -728,47 +796,19 @@ body.browse .upd, #roomPanel:not([hidden]) ~ .upd { display: none !important; }
   .field .btn { width: 100%; }
   .tip2 { display: none; }
 }
-@media (max-width: 380px) {
-  #bOp, #bLink { display: none; }
-}
-/* janelas estreitas: botoes um pouco menores e a area de arrastar so com a "alca", para caberem
-   o microfone e o fechar dentro do espaco que sobra ao lado dos botoes do YouTube */
-@media (max-width: 380px) {
-  .bar .ib { width: 28px; }
-  .bar .drag { min-width: 28px; }
-}
-@media (max-width: 300px) {
-  .ttl, #bRoom { display: none; }
-}
-@media (max-width: 260px) {
-  #bSpeed { display: none; }
-}
-
-/* Durante o video a pilula tem de deixar livres os botoes do YouTube (mudo, legendas, engrenagem:
-   os 3 ultimos botoes de 48px do topo, em qualquer tamanho de janela). Quanto mais estreita a janela,
-   menos botoes ela mostra; Ctrl+V e Ctrl+L continuam valendo. */
-@media (max-width: 540px) { body.playing:not(.home):not(.err) #bLink  { display: none; } }
-@media (max-width: 499px) { body.playing:not(.home):not(.err) .ttl     { display: none; } }
-@media (max-width: 470px) { body.playing:not(.home):not(.err) #bOp     { display: none; } }
-@media (max-width: 430px) { body.playing:not(.in-room):not(.home):not(.err) #bRoom { display: none; } }
-@media (max-width: 400px) { body.playing:not(.home):not(.err) #bPin    { display: none; } }
-@media (max-width: 365px) { body.playing:not(.home):not(.err) #bSpeed  { display: none; } }
-/* dentro de uma sala o microfone e o botao da sala ganham prioridade na pilula: os outros saem primeiro */
-@media (max-width: 600px) { body.in-room.playing:not(.home):not(.err) #bLink  { display: none; } }
-@media (max-width: 560px) { body.in-room.playing:not(.home):not(.err) .ttl    { display: none; } }
-@media (max-width: 520px) { body.in-room.playing:not(.home):not(.err) #bOp    { display: none; } }
-@media (max-width: 480px) { body.in-room.playing:not(.home):not(.err) #bPin   { display: none; } }
-@media (max-width: 440px) { body.in-room.playing:not(.home):not(.err) #bSpeed { display: none; } }
-@media (max-width: 339px) { body.in-room.playing:not(.home):not(.err) #bRoom  { display: none; } }
+/* Durante o video a pilula tem de deixar livres os botoes do YouTube (mudo, legendas, engrenagem). Quanto mais
+   estreita a janela, menos botoes ela mostra: quem decide e o fitBar() (app.js), que tira da barra, na ordem de
+   prioridade, o que nao cabe (classe fit-off). O menu ≡ tem tudo o que sair da barra; Ctrl+V e Ctrl+L continuam valendo. */
+.fit-off { display: none !important; }
 /* tela inicial: os botoes de baixo ficam so com icone quando a janela e estreita */
 @media (max-width: 440px) { .alt .btn span { display: none; } .alt .btn { padding: 0 .9rem; } }
 /* barra do modo navegacao: so icones nas abas quando a janela e estreita */
 @media (max-width: 540px) { .tab span { display: none; } .tab { padding: 0 8px; } }
 @media (max-width: 440px) { #mHome, #mPin { display: none; } }
 @media (max-width: 330px) { #mBack { display: none; } }
-/* janelas muito estreitas: o YouTube mostra so 2 botoes (96px), entao da para a barra ocupar um pouco mais */
-@media (max-width: 314px) { .bar { max-width: calc(100% - 112px); } }
-@media (max-height: 340px) {
+/* janelas muito estreitas: o YouTube mostra so 1 botao (as legendas), entao da para a barra ocupar um pouco mais */
+@media (max-width: 318px) { .bar { max-width: calc(100% - 88px); } }
+@media (max-height: 360px) {
   .tip2 { display: none; }
   .logo { width: 2.6rem; height: 2.6rem; margin-bottom: .5rem; }
   h1 { margin-bottom: .7rem; }

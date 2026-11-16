@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes da pilula…</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; background: #111; color: #eee; padding: 1rem 1.5rem; }
+  code { background: #222; padding: .1em .4em; border-radius: 4px; }
+  .ok { color: #5ee0a0; } .bad { color: #ff6a5e; }
+  li { margin: .15rem 0; }
+  iframe { position: absolute; left: -9999px; top: 0; height: 330px; border: 0; }
+</style>
+</head>
+<body>
+<h1>Pilula da barra de cima (<code>web/app.css</code> + <code>fitBar()</code> de <code>web/app.js</code>)</h1>
+<p>Abre a tela do programa numa janela de 240 a 720 px de largura, em varias situacoes (video, sala, selo de velocidade, tela inicial) e confere que
+nenhum botao fica cortado, que o menu, a alca de arrastar, minimizar e fechar nunca saem, que a pilula deixa livres os botoes do YouTube e que os botoes
+saem na ordem certa (e nunca voltam e somem de novo quando a janela encolhe). Na pasta do projeto: <code>python -m http.server 8000</code>;
+depois abra <code>http://localhost:8000/tests/pill-test.html</code>.</p>
+<h2 id="resumo">rodando…</h2>
+<ul id="lista"></ul>
+<iframe id="f" src="../web/index.html"></iframe>
+<script>
+(function () {
+  var results = [];
+  function check(name, cond, extra) { results.push({ name: name, ok: !!cond, extra: cond ? undefined : extra }); }
+
+  var IDS = ['bMenu', 'drag', 'ttl', 'bSpeed', 'bLink', 'bRoom', 'bMic', 'bPin', 'bMin', 'bClose'];
+  var BASE = ['bMenu', 'drag', 'bMin', 'bClose'];
+  // ordem em que saem (o primeiro sai antes) - igual a FIT_NORMAL / FIT_ROOM de app.js
+  var DROP_NORMAL = ['ttl', 'bLink', 'bRoom', 'bPin', 'bSpeed'];
+  var DROP_ROOM = ['ttl', 'bLink', 'bPin', 'bSpeed', 'bRoom', 'bMic'];
+
+  var SCENES = [
+    { name: 'video', state: 'playing', room: false, chip: false },
+    { name: 'video + selo de velocidade', state: 'playing', room: false, chip: true },
+    { name: 'video numa sala', state: 'playing', room: true, chip: false },
+    { name: 'video numa sala + selo de velocidade', state: 'playing', room: true, chip: true },
+    { name: 'tela inicial (barra de ponta a ponta)', state: 'empty', room: false, chip: false },
+    { name: 'tela inicial numa sala', state: 'empty', room: true, chip: true }
+  ];
+  var TITLE = 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film';
+
+  function setup(win, sc) {
+    var d = win.document;
+    d.body.className = sc.state === 'empty' ? 'empty ui' : 'playing ui';
+    if (sc.room) d.body.classList.add('in-room');
+    d.getElementById('bMic').hidden = !sc.room;
+    var chip = d.getElementById('bSpeed');
+    chip.hidden = !sc.chip;
+    chip.textContent = '1.25×';
+    d.getElementById('ttl').textContent = TITLE;
+  }
+
+  function exists(sc, id) { return id === 'bSpeed' ? sc.chip : (id === 'bMic' ? sc.room : true); }
+
+  function measure(win, W) {
+    var d = win.document;
+    var bar = d.getElementById('bar');
+    var br = bar.getBoundingClientRect();
+    var vis = {}, clipped = [];
+    IDS.forEach(function (id) {
+      var e = d.getElementById(id);
+      var shown = win.getComputedStyle(e).display !== 'none' && !e.hidden;
+      vis[id] = shown;
+      if (shown) {
+        var r = e.getBoundingClientRect();
+        if (r.right > br.right - 1 + 0.5 || r.left < br.left) clipped.push(id);
+      }
+    });
+    return { vis: vis, clipped: clipped, over: bar.scrollWidth > bar.clientWidth + 1, right: br.right, dragW: d.getElementById('drag').offsetWidth, ttlW: d.getElementById('ttl').offsetWidth };
+  }
+
+  function frameReady(f) {
+    return new Promise(function (res) {
+      var w = f.contentWindow;
+      if (w && w.__lm && w.document.readyState === 'complete') { res(); return; }
+      f.addEventListener('load', function () { setTimeout(res, 50); }, { once: true });
+    });
+  }
+
+  function run() {
+    var f = document.getElementById('f');
+    var win = f.contentWindow;
+    SCENES.forEach(function (sc) {
+      var prev = null;
+      var problems = [];
+      var order = sc.room ? DROP_ROOM : DROP_NORMAL;
+      var widths = 0;
+      for (var W = 720; W >= 240; W -= 4) {
+        f.style.width = W + 'px';
+        setup(win, sc);
+        win.__lm.fitBar();
+        var m = measure(win, W);
+        widths++;
+        if (m.clipped.length) problems.push(W + ' px: botao cortado: ' + m.clipped.join(','));
+        if (m.over) problems.push(W + ' px: a pilula transborda');
+        BASE.forEach(function (id) { if (!m.vis[id]) problems.push(W + ' px: ' + id + ' sumiu (nunca pode)'); });
+        if (m.dragW < 28) problems.push(W + ' px: a alca de arrastar ficou com ' + m.dragW + ' px');
+        if (m.vis.ttl && m.ttlW < 60) problems.push(W + ' px: titulo visivel com so ' + m.ttlW + ' px');
+        if (sc.state === 'playing') {
+          var free = W <= 318 ? 80 : 128;                          // o que sobra para os botoes do YouTube (legendas, engrenagem)
+          if (m.right > W - free + 0.5) problems.push(W + ' px: a pilula passa de ' + (W - free) + ' px e cobre os botoes do YouTube (termina em ' + Math.round(m.right) + ')');
+        }
+        // ordem de saida: se um botao saiu, todos os que saem antes dele (e existem na cena) ja tem de ter saido
+        order.forEach(function (id, i) {
+          if (!exists(sc, id) || m.vis[id]) return;
+          for (var j = 0; j < i; j++) {
+            if (exists(sc, order[j]) && m.vis[order[j]]) problems.push(W + ' px: ' + id + ' saiu antes de ' + order[j]);
+          }
+        });
+        // nunca volta: o que sumiu numa janela maior nao pode reaparecer numa menor. Unica excecao: ate 318 px o YouTube
+        // mostra 1 botao no canto em vez de 2 (o espaco que sobra para a pilula cresce de verdade)
+        if (prev && !(prev.W > 318 && W <= 318)) IDS.forEach(function (id) { if (!prev.vis[id] && m.vis[id]) problems.push(W + ' px: ' + id + ' reapareceu numa janela menor'); });
+        m.W = W;
+        prev = m;
+      }
+      check('pilula (' + sc.name + '): ' + widths + ' larguras de 720 a 240 px sem botao cortado, na ordem certa', problems.length === 0, problems.slice(0, 6));
+    });
+
+    // relatorio: o que sobra na pilula nas larguras tipicas (e nos dois pontos onde a regra muda: 380 px e 318 px)
+    var info = [];
+    SCENES.forEach(function (sc) {
+      [240, 280, 320, 380, 480, 720].forEach(function (W) {
+        f.style.width = W + 'px';
+        setup(win, sc);
+        win.__lm.fitBar();
+        var m = measure(win, W);
+        info.push(sc.name + ' | ' + W + ' px: ' + IDS.filter(function (id) { return m.vis[id]; }).join(' '));
+      });
+    });
+    window.__pillInfo = info;
+  }
+
+  function finish() {
+    var passed = results.filter(function (q) { return q.ok; }).length, failed = results.length - passed;
+    var lista = document.getElementById('lista');
+    results.forEach(function (q) {
+      var li = document.createElement('li');
+      li.className = q.ok ? 'ok' : 'bad';
+      li.textContent = (q.ok ? 'OK  ' : 'FALHOU  ') + q.name + (q.ok ? '' : '  ->  ' + JSON.stringify(q.extra));
+      lista.appendChild(li);
+    });
+    (window.__pillInfo || []).forEach(function (t) {
+      var li = document.createElement('li');
+      li.textContent = 'visiveis em ' + t;
+      lista.appendChild(li);
+    });
+    var resumo = document.getElementById('resumo');
+    resumo.textContent = (failed ? 'FALHOU ' : 'OK ') + passed + '/' + results.length;
+    resumo.className = failed ? 'bad' : 'ok';
+    document.title = resumo.textContent;
+  }
+
+  var f = document.getElementById('f');
+  frameReady(f).then(function () { try { run(); } catch (e) { check('o teste rodou sem erro', false, String(e && e.stack || e)); } finish(); });
+})();
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@
  *   LMVoice.setMuted(mudo) / toggleMute()
  *   LMVoice.person(id)             { vol, mute } preferencias SO suas sobre aquela pessoa; setPersonVolume / setPersonMute
  *   LMVoice.masterVolume([v])      volume de todas as vozes (0 a 1)
+ *   LMVoice.setDeaf(sim) / isDeaf() "fone": para de ouvir as vozes da sala (o microfone e o video nao mudam)
  *   LMVoice.peerState(id)          conectando | conectado | falhou
  *   LMVoice.hooks                  { changed, speaking(id, falando) }
  */
@@ -36,6 +37,7 @@
     peers: {},                     // id -> pessoa conectada
     people: {},                    // id -> { vol, mute } (so nesta sessao)
     master: 1,
+    deaf: false,                   // fone desligado: ninguem da sala e ouvido (so nesta sessao de voz)
     ctx: null,
     local: { speaking: false, lastLoud: 0, analyser: null, src: null },
     timer: 0,
@@ -112,6 +114,7 @@
     var was = V.on;
     V.on = false;
     V.muted = false;
+    V.deaf = false;
     Object.keys(V.peers).forEach(closePeer);
     releaseMic();
     stopTimer();
@@ -137,6 +140,13 @@
   }
 
   function toggleMute() { return setMuted(!(V.muted || !V.track)); }
+
+  // "fone": liga/desliga o que voce OUVE da sala (vale para todas as vozes; o microfone e o volume do video ficam como estao)
+  function setDeaf(d) {
+    V.deaf = !!d;
+    Object.keys(V.peers).forEach(function (id) { applyVolume(V.peers[id]); });
+    changed();
+  }
 
   // ---------- conexoes com as outras pessoas ----------
   function sig(to, data) { Room.send({ t: 'sig', to: to, data: data }); }
@@ -261,7 +271,7 @@
     if (!peer || !peer.audio) return;
     var p = person(peer.id);
     peer.audio.volume = Math.max(0, Math.min(1, V.master * p.vol));
-    peer.audio.muted = !!p.mute;
+    peer.audio.muted = V.deaf || !!p.mute;
   }
 
   function attachAudio(peer) {
@@ -352,6 +362,8 @@
     micError: function () { return V.micError; },
     setMuted: setMuted,
     toggleMute: toggleMute,
+    setDeaf: setDeaf,
+    isDeaf: function () { return V.on && V.deaf; },
     person: function (id) { var p = person(id); return { vol: p.vol, mute: p.mute }; },
     setPersonVolume: function (id, v) { person(id).vol = Math.max(0, Math.min(1, +v || 0)); applyVolume(V.peers[id]); },
     setPersonMute: function (id, m) { person(id).mute = !!m; applyVolume(V.peers[id]); },

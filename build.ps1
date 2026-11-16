@@ -2,13 +2,15 @@
 #
 #   powershell -ExecutionPolicy Bypass -File .\build.ps1             # so compila
 #   powershell -ExecutionPolicy Bypass -File .\build.ps1 -Package    # compila e gera o .zip em dist\
+#   powershell -ExecutionPolicy Bypass -File .\build.ps1 -Out C:\pasta  # grava o .exe (e as DLLs) em outra pasta (nao mexe no .exe do projeto)
 #
 # Nao precisa instalar nada: usa o compilador C# que ja vem no Windows (.NET Framework 4).
 # A unica dependencia externa e a biblioteca oficial da Microsoft "Microsoft.Web.WebView2"
 # (pacote do NuGet). Se a pasta lib\ ainda nao tiver os arquivos dela, este script baixa o
 # pacote de api.nuget.org, confere a assinatura digital da Microsoft e copia o que precisa.
 param(
-    [switch]$Package
+    [switch]$Package,
+    [string]$Out = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,10 +19,11 @@ $ProgressPreference = 'SilentlyContinue'
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $src     = Join-Path $root 'src'
 $lib     = Join-Path $root 'lib'
-$exe     = Join-Path $root 'LMMiniPlayer.exe'
+$outDir  = if ($Out) { New-Item -ItemType Directory -Force -Path $Out | Select-Object -ExpandProperty FullName } else { $root }
+$exe     = Join-Path $outDir 'LMMiniPlayer.exe'
 $csc     = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $wv2     = '1.0.4314.35'     # versao do pacote Microsoft.Web.WebView2
-$version = '1.6.0'           # versao do programa (igual a AssemblyVersion em src\Program.cs)
+$version = '1.7.0'           # versao do programa (igual a AssemblyVersion em src\Program.cs)
 
 if (-not (Test-Path $csc)) { throw "Nao achei o compilador C# em $csc (precisa do .NET Framework 4)." }
 
@@ -85,7 +88,7 @@ $cscArgs += @(Get-ChildItem (Join-Path $src '*.cs') | Sort-Object Name | ForEach
 if ($LASTEXITCODE -ne 0) { throw 'A compilacao falhou.' }
 
 # o programa procura as DLLs na mesma pasta do .exe
-Copy-Item $coreDll, $loaderDll $root -Force
+Copy-Item $coreDll, $loaderDll $outDir -Force
 Write-Host "Pronto: $exe"
 
 if ($Package) {

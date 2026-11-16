@@ -3,12 +3,17 @@
  * Roda dentro da janela do programa (WebView2) e tambem num navegador comum, para teste.
  *
  * Conversa com o programa (C#) por mensagens de texto "comando:argumento":
- *   pagina -> programa:  ready | drag | size:<borda> | min | close | pin:0/1 | op:0.85
+ *   pagina -> programa:  ready | drag | size:<borda> | min | close | pin:0/1 | op:0.85 (transparencia, 0.10 a 1)
+ *                        opdrag:0/1 (a barra de transparencia esta sendo arrastada) | menu:0/1 (menu suspenso aberto)
+ *                        ov:0/1 (ha uma tela do programa por cima do video: o modo fantasma mostra a janela inteira)
+ *                        tbs:<p=..;nx=..;mic=..;hear=..> (estado dos botoes da miniatura da barra de tarefas)
  *                        paste | typing:0/1 | open:<url>
  *                        mod:<player|youtube|spotify> | search:<texto> | modhome | modhide | yhome | yprep
  *                        ysearch:<n>:<texto> | ymore:<n>:<token> | yinfo:<n>:<id>   (veja yt.js)
  *                        update:<link do video atual> | updweb
  *   programa -> pagina:  cfg:pin=1;op=1 | url:<texto> | link | ui:0/1 | dragend
+ *                        menu:toggle | menu:close (a alca do modo fantasma foi clicada)
+ *                        tb:<prev|toggle|next|mic|hear|vdown|vup> (botao da miniatura da barra de tarefas)
  *                        mod:<modulo> | modtitle:<texto> | modfail:<modulo>
  *                        yres:<n>:<json> | yinfo:<n>:<json>   (veja yt.js)
  *                        upd:ready:<versao> | upd:manual:<versao> | upd:busy | upd:fail
@@ -21,7 +26,8 @@
   var HAS_HOST = !!(window.chrome && window.chrome.webview && window.chrome.webview.postMessage);
   var Room = window.LMRoom;
   var APP_NAME = 'LM Mini Player';
-  var OPACITY_STEPS = [1, 0.85, 0.7, 0.55, 0.4];
+  var GHOST_MAX = 0.5;                                     // ate esta transparencia a janela vira "fantasma" (igual a GhostMax em Program.cs)
+  var HIST_MAX = 30;                                       // videos lembrados para o botao "anterior"
   // teclas de velocidade (como no Video Speed Controller): pela LETRA da tecla; so em teclados
   // nao latinos vale a posicao fisica (code)
   var SPEED_BY_CHAR = { d: 'faster', s: 'slower', r: 'reset', x: 'forward', z: 'back' };
@@ -56,6 +62,10 @@
     qDrag: null,        // arraste da fila em andamento
     qIdle: true,        // nada tocando (ou o ultimo video acabou sem proximo): o que entrar na SUA fila comeca a tocar
     fromQueue: null,    // id do video que a SUA fila pos para tocar (se nao puder tocar aqui, passa para o proximo)
+    hist: [],           // videos que tocaram antes deste (botao "anterior")
+    histNav: false,     // esta voltando no historico: nao poe o video de agora la
+    opDrag: false,      // a barra de transparencia esta sendo arrastada
+    lastVol: 0,         // ultimo volume do video antes de ficar mudo (para o botao de som voltar a ele)
     toastTimer: 0,
     muteOnReady: false  // so para testes automaticos (abre o video mudo)
   };
@@ -95,13 +105,21 @@
       refreshUi();
     } else if (cmd === 'upd') {
       onUpdate(arg);
+    } else if (cmd === 'menu') {
+      if (arg === 'toggle') { if (menuIsOpen()) closeMenu(false); else openMenu(); }      // clique na alca do modo fantasma
+      else if (arg === 'close') closeMenu(false);                                         // o mouse saiu da janela com o menu aberto
+    } else if (cmd === 'tb') {
+      tbAction(arg);                                                                      // botao da miniatura da barra de tarefas
+    } else if (cmd === 'dbg') {
+      window.__dbg = arg;                                                                 // so nos testes (o programa so manda isto com LMMP_TEST=1)
     }
   }
 
   if (HAS_HOST) {
     window.chrome.webview.addEventListener('message', function (e) { onHostMessage(e.data); });
   }
-  window.__lm = { fromHost: onHostMessage, state: S, renderRate: function () { renderRate(); }, resumeLink: function () { return resumeLink(); } };   // ganchos para testes
+  window.__lm = { fromHost: onHostMessage, state: S, renderRate: function () { renderRate(); }, resumeLink: function () { return resumeLink(); },
+                  fitBar: function () { fitSig = ''; fitBarIfNeeded(); }, tbState: function () { return tbState(); } };   // ganchos para testes
 
   function applyCfg(arg) {
     arg.split(';').forEach(function (kv) {
@@ -119,8 +137,9 @@
   function refreshUi() {
     var always = body.classList.contains('empty') || body.classList.contains('home') ||
       body.classList.contains('err') || body.classList.contains('browse');
-    body.classList.toggle('ui', always || S.hostActive || S.barHover || S.typing);
+    body.classList.toggle('ui', always || S.hostActive || S.barHover || S.typing || menuIsOpen());
     renderRate();
+    syncOverlay();
   }
 
   function toast(msg) {
@@ -136,6 +155,7 @@
     $('ttl').textContent = name;
     $('ttl').title = name;
     document.title = name === APP_NAME ? APP_NAME : name + ' · ' + APP_NAME;
+    fitBarIfNeeded();
   }
 
   function renderPin() {
@@ -149,10 +169,18 @@
     m.classList.toggle('on', S.pin);
     m.setAttribute('aria-pressed', S.pin ? 'true' : 'false');
     m.title = b.title;
+    $('mnPin').setAttribute('aria-checked', S.pin ? 'true' : 'false');
   }
 
+  // a barra de transparencia (no menu) e o numero ao lado dela; abaixo de GHOST_MAX o aviso do modo fantasma fica em destaque
   function renderOpacity() {
-    $('bOp').title = 'Transparência: ' + Math.round(S.opacity * 100) + '% (clique para alternar)';
+    var pct = Math.round(S.opacity * 100);
+    var r = $('mnOp');
+    if (!S.opDrag && document.activeElement !== r) r.value = String(pct);
+    $('mnOpVal').textContent = pct + '%';
+    $('mnHint').classList.toggle('on', S.opacity <= GHOST_MAX + 0.0001);
+    $('bMenu').title = 'Menu: transparência (' + pct + '%) e mais';
+    $('mMenu').title = $('bMenu').title;
   }
 
   // selo da velocidade na barra: so aparece quando ha video e a velocidade nao e 1x
@@ -162,6 +190,9 @@
       !body.classList.contains('empty') && !body.classList.contains('err');
     b.hidden = !on;
     b.textContent = (Math.round(S.rate * 100) / 100) + '×';
+    $('mnSpeed').hidden = !on;
+    $('mnSpeedVal').textContent = b.textContent;
+    fitBarIfNeeded();
   }
 
   // manda um comando (faster, slower, reset...) para o script que vive dentro do player do YouTube
@@ -178,15 +209,227 @@
   function focusPlayer() {
     try {
       var f = S.player && S.player.getIframe && S.player.getIframe();
+      if (menuIsOpen()) return;                                      // focar o video tiraria o foco desta pagina e fecharia o menu
       if (f && S.mode === 'player' && !body.classList.contains('home')) f.focus();
     } catch (err) { /* ignora */ }
   }
 
-  function nextOpacity() {
-    for (var i = 0; i < OPACITY_STEPS.length; i++) {
-      if (OPACITY_STEPS[i] < S.opacity - 0.001) return OPACITY_STEPS[i];
+  /* ---------- pilula: tira da barra o que nao cabe (o menu ≡ tem tudo) ---------- */
+
+  // Ordem em que os botoes saem da barra quando a janela estreita (o primeiro sai antes). Numa sala o botao da sala e o
+  // microfone ganham prioridade. Ficam sempre: o ≡, a alca de arrastar, minimizar e fechar.
+  var FIT_NORMAL = ['ttl', 'bLink', 'bRoom', 'bPin', 'bSpeed', 'bMic'];
+  var FIT_ROOM = ['ttl', 'bLink', 'bPin', 'bSpeed', 'bRoom', 'bMic'];
+  var fitSig = '';
+
+  function fitBar() {
+    var bar = $('bar');
+    var order = body.classList.contains('in-room') ? FIT_ROOM : FIT_NORMAL;
+    var i;
+    for (i = 0; i < FIT_NORMAL.length; i++) $(FIT_NORMAL[i]).classList.remove('fit-off');
+    if (!bar.offsetWidth) return;                                      // barra escondida (modo navegacao): nada a medir
+    if ($('ttl').offsetWidth < 64) $('ttl').classList.add('fit-off');  // titulo curto demais para ler: sai
+    for (i = 0; i < order.length && bar.scrollWidth > bar.clientWidth + 1; i++) $(order[i]).classList.add('fit-off');
+  }
+
+  // so refaz a conta quando algo que muda a largura mudou (tamanho da janela, estado da tela, selo de velocidade, microfone, titulo)
+  function fitBarIfNeeded() {
+    var sig = [window.innerWidth, body.className.replace(/(^|\s)(ui|menu-open)(?=\s|$)/g, ''), $('bSpeed').hidden ? '' : $('bSpeed').textContent,
+      $('bMic').hidden ? 0 : 1, $('ttl').textContent].join('|');
+    if (sig === fitSig) return;
+    fitSig = sig;
+    fitBar();
+  }
+
+  /* ---------- tela do programa por cima do video (o modo fantasma mostra a janela inteira enquanto houver uma) ---------- */
+
+  var lastOv = null;
+
+  function syncOverlay() {
+    var on = menuIsOpen() || !$('roomPanel').hidden || body.classList.contains('empty') || body.classList.contains('home') ||
+      body.classList.contains('err') || body.classList.contains('browse');
+    if (on === lastOv) return;
+    lastOv = on;
+    toHost('ov:' + (on ? 1 : 0));
+  }
+
+  /* ---------- menu suspenso (botao ≡): transparencia e as acoes da barra ---------- */
+
+  function menuIsOpen() { return !$('menu').hidden; }
+
+  // o que o menu mostra agora (so com o menu aberto; e de novo quando algo muda enquanto ele esta aberto)
+  function renderMenu() {
+    renderOpacity();
+    syncVolumes();
+    var q = qItems().length;
+    var qb = $('mnRoomQ');
+    qb.hidden = !q;
+    qb.textContent = q > 9 ? '9+' : String(q);
+    var inRoom = !!Room.code();
+    var sup = !!(Voice && Voice.supported());
+    var on = !!(Voice && Voice.isOn());
+    var muted = on && Voice.isMuted();
+    var deaf = on && Voice.isDeaf();
+    var mic = $('mnMic');
+    mic.hidden = !(inRoom && sup);
+    mic.classList.toggle('live', on && !muted);
+    mic.classList.toggle('muted', on && muted);
+    mic.querySelector('use').setAttribute('href', on && muted ? '#i-mic-off' : '#i-mic');
+    $('mnMicText').textContent = !on ? 'Entrar na voz' : (muted ? 'Ligar o microfone' : 'Silenciar o microfone');
+    var hear = $('mnHear');
+    hear.hidden = !(inRoom && sup && on);
+    hear.classList.toggle('muted', deaf);
+    hear.setAttribute('aria-checked', deaf ? 'false' : 'true');
+    hear.querySelector('use').setAttribute('href', deaf ? '#i-headphones-off' : '#i-headphones');
+    $('mnHearText').textContent = deaf ? 'Voltar a ouvir as vozes' : 'Parar de ouvir as vozes';
+  }
+
+  function openMenu() {
+    if (menuIsOpen()) return;
+    $('roomPanel').hidden = true;                                      // um painel de cada vez (sem devolver o foco ao video: isso fecharia o menu)
+    renderMenu();
+    $('menu').hidden = false;
+    body.classList.add('menu-open');
+    $('bMenu').setAttribute('aria-expanded', 'true');
+    $('mMenu').setAttribute('aria-expanded', 'true');
+    toHost('menu:1');
+    refreshUi();
+  }
+
+  function endOpDrag() {
+    if (!S.opDrag) return;
+    S.opDrag = false;
+    toHost('opdrag:0');
+    renderOpacity();
+  }
+
+  function closeMenu(refocus) {
+    if (!menuIsOpen()) return;
+    $('menu').hidden = true;
+    body.classList.remove('menu-open');
+    $('bMenu').setAttribute('aria-expanded', 'false');
+    $('mMenu').setAttribute('aria-expanded', 'false');
+    endOpDrag();
+    toHost('menu:0');
+    refreshUi();
+    if (refocus) focusPlayer();
+  }
+
+  /* ---------- botoes da miniatura da barra de tarefas (anterior, play/pause, proxima, microfone, fone, volume) ---------- */
+
+  function histKey(i) { return i ? (i.id || '') + '|' + (i.list || '') : ''; }
+
+  function pushHist(info) {
+    if (!info || (!info.id && !info.list)) return;
+    var h = S.hist;
+    if (h.length && histKey(h[h.length - 1]) === histKey(info)) return;
+    h.push({ id: info.id, list: info.list, start: 0, index: info.index || 0, url: info.url });
+    if (h.length > HIST_MAX) h.shift();
+  }
+
+  // ha para onde ir? fila (da sala ou a sua) ou proximo video da lista do YouTube que esta tocando
+  function canNext() {
+    if (qItems().length > 0) return true;
+    try {
+      if (S.current && S.current.list && S.player && S.player.getPlaylist) {
+        var pl = S.player.getPlaylist();
+        var ix = S.player.getPlaylistIndex();
+        return !!(pl && ix >= 0 && ix < pl.length - 1);
+      }
+    } catch (e) { /* ignora */ }
+    return false;
+  }
+
+  // p: -1 nada tocando, 0 parado, 1 tocando | nx: ha proximo | mic: -1 fora da voz, 0 nao entrou, 1 ligado, 2 mudo | hear: -1 fora da voz, 1 ouvindo, 0 fone desligado
+  function tbState() {
+    var p = -1, nx = 0;
+    if (S.current && !body.classList.contains('empty')) {
+      p = 0;
+      try { var st = S.player.getPlayerState(); if (st === 1 || st === 3) p = 1; } catch (e) { /* o player ainda esta carregando */ }
+      nx = canNext() ? 1 : 0;
     }
-    return 1;
+    var mic = -1, hear = -1;
+    if (Room.code() && Voice && Voice.supported()) {
+      var on = Voice.isOn();
+      mic = !on ? 0 : (Voice.isMuted() ? 2 : 1);
+      hear = on ? (Voice.isDeaf() ? 0 : 1) : -1;
+    }
+    return 'p=' + p + ';nx=' + nx + ';mic=' + mic + ';hear=' + hear;
+  }
+
+  var tbLast = '';
+  function pushTb() {
+    var s = tbState();
+    if (s === tbLast) return;
+    tbLast = s;
+    toHost('tbs:' + s);
+  }
+
+  function togglePlayback() {
+    if (!S.current || !S.player) return;
+    try {
+      var st = S.player.getPlayerState();
+      if (st === 1 || st === 3) S.player.pauseVideo(); else S.player.playVideo();   // tocando ou carregando: pausa; senao toca
+    } catch (e) { /* ignora */ }
+  }
+
+  function skipNext() {
+    if (!S.current) return;
+    if (qItems().length > 0) {                                        // a fila manda (na sala, para todos)
+      if (Room.code()) Room.qNext(); else localAdvance(true);
+      return;
+    }
+    try {
+      if (canNext() && S.player.nextVideo) { S.player.nextVideo(); return; }
+    } catch (e) { /* ignora */ }
+    toast('Não há próximo vídeo na fila');
+  }
+
+  // como nos tocadores de musica: depois de 3 s volta ao comeco do video; no comeco volta ao video de antes
+  function skipPrev() {
+    if (!S.current || !S.player) return;
+    var t = 0;
+    try { t = S.player.getCurrentTime() || 0; } catch (e) { /* ignora */ }
+    if (t <= 3) {
+      try {
+        if (S.current.list && S.player.getPlaylistIndex && S.player.getPlaylistIndex() > 0) { S.player.previousVideo(); return; }
+      } catch (e) { /* ignora */ }
+      var h = S.hist.pop();
+      if (h) {
+        S.histNav = true;
+        try { play(h); } finally { S.histNav = false; }
+        return;
+      }
+    }
+    try { S.player.seekTo(0, true); } catch (e) { /* ignora */ }
+  }
+
+  // volume do video em passos de 5% (como as setas do YouTube)
+  function stepVolume(d) {
+    var cur = videoVolume();
+    if (!S.current || cur === null) return;
+    var v = Math.max(0, Math.min(100, Math.round(cur / 5) * 5 + d));
+    setVideoVolume(v);
+    toast('Volume do vídeo: ' + v + '%');
+  }
+
+  // o "fone": para de ouvir as vozes da sala (e volta a ouvir); so vale dentro da voz
+  function toggleHear() {
+    if (!Voice || !Voice.isOn()) return;
+    var d = !Voice.isDeaf();
+    Voice.setDeaf(d);
+    toast(d ? 'Você parou de ouvir as vozes da sala' : 'Voltou a ouvir as vozes da sala');
+  }
+
+  function tbAction(a) {
+    if (a === 'toggle') togglePlayback();
+    else if (a === 'next') skipNext();
+    else if (a === 'prev') skipPrev();
+    else if (a === 'mic') { if (Room.code()) micClick(); }
+    else if (a === 'hear') toggleHear();
+    else if (a === 'vdown') stepVolume(-5);
+    else if (a === 'vup') stepVolume(5);
+    setTimeout(pushTb, 150);
   }
 
   /* ---------- sala: ver o mesmo video junto com outras pessoas (e conversar por voz) ---------- */
@@ -258,13 +501,54 @@
   }
 
   // volume do video (o do player do YouTube), separado do volume das vozes
+  // (o controle de volume do proprio YouTube fica escondido, veja speed-frame.js: o volume do video e ajustado aqui,
+  // no menu ≡, no painel da sala e nos botoes da miniatura da barra de tarefas)
+  function videoVolume() {                                          // 0 a 100 (0 tambem quando esta mudo); null = sem player
+    try {
+      if (S.player && S.player.getVolume) return (S.player.isMuted && S.player.isMuted()) ? 0 : Math.round(S.player.getVolume());
+    } catch (e) { /* o player ainda esta carregando */ }
+    return null;
+  }
+
   function syncVolumes() {
+    var vol = videoVolume();
     var v = $('rpVidVol');
-    if (document.activeElement !== v) {
-      try { if (S.player && S.player.getVolume) v.value = S.player.isMuted && S.player.isMuted() ? 0 : S.player.getVolume(); } catch (e) { /* ignora */ }
-    }
+    if (document.activeElement !== v && vol !== null) v.value = String(vol);
+    var m = $('mnVol');
+    if (document.activeElement !== m && vol !== null) m.value = String(vol);
+    m.disabled = vol === null;
+    $('mnVolVal').textContent = vol === null ? '—' : vol + '%';
+    $('mnMute').querySelector('use').setAttribute('href', vol === 0 ? '#i-volume-x' : '#i-volume');
     var vv = $('rpVoiceVol');
     if (Voice && document.activeElement !== vv) vv.value = Math.round(Voice.masterVolume() * 100);
+  }
+
+  function setVideoVolume(n) {
+    var v = Math.max(0, Math.min(100, Math.round(n)));
+    try {
+      if (!S.player || !S.player.setVolume) return;
+      if (v > 0) S.lastVol = v;
+      S.player.setVolume(v);
+      if (v > 0 && S.player.isMuted && S.player.isMuted()) S.player.unMute();
+    } catch (e) { /* ignora */ }
+    syncVolumes();
+  }
+
+  // botao de som: sem som (mudo ou volume 0) volta ao ultimo volume (ou 50); com som deixa mudo
+  function toggleVideoMute() {
+    if (!S.player || !S.current) return;
+    try {
+      var vol = S.player.getVolume();
+      var muted = !!(S.player.isMuted && S.player.isMuted());
+      if (muted || vol === 0) {
+        if (vol === 0) S.player.setVolume(S.lastVol > 0 ? S.lastVol : 50);
+        if (muted) S.player.unMute();
+      } else {
+        S.lastVol = vol;
+        S.player.mute();
+      }
+    } catch (e) { /* ignora */ }
+    syncVolumes();
   }
 
   // lista de quem esta na sala (nomes vem de outras pessoas: sempre como texto, nunca como HTML)
@@ -338,11 +622,22 @@
     rm.querySelector('use').setAttribute('href', on && muted ? '#i-mic-off' : '#i-mic');
     $('rpMicText').textContent = !on ? 'Entrar na voz' : (muted ? 'Ligar microfone' : 'Silenciar microfone');
     $('rpVoiceOff').hidden = !on;
+    var deaf = on && Voice.isDeaf();
+    var rh = $('rpHear');                                            // o "fone": parar de ouvir as vozes da sala
+    rh.hidden = !on;
+    rh.classList.toggle('muted', deaf);
+    rh.querySelector('use').setAttribute('href', deaf ? '#i-headphones-off' : '#i-headphones');
+    $('rpHearText').textContent = deaf ? 'Voltar a ouvir' : 'Parar de ouvir';
+    if (menuIsOpen()) renderMenu();
+    fitBarIfNeeded();
+    pushTb();
   }
 
   function openRoomPanel() {
     clearError();
+    closeMenu(false);
     $('roomPanel').hidden = false;
+    syncOverlay();
     $('rpName').value = Room.name();
     $('rpName2').value = Room.name();
     renderRoom();
@@ -354,7 +649,7 @@
     } else if (!Room.code()) setTimeout(function () { (Room.name() ? $('rpCode') : $('rpName')).focus(); }, 30);
   }
 
-  function closeRoomPanel() { $('roomPanel').hidden = true; focusPlayer(); }
+  function closeRoomPanel() { $('roomPanel').hidden = true; syncOverlay(); focusPlayer(); }
 
   // desenha o botao da barra e o painel conforme a sala e a aba (Sala | Fila); a fila vale em qualquer caso
   function renderRoom() {
@@ -444,10 +739,8 @@
   $('bMic').addEventListener('click', function () { micClick(); focusPlayer(); });
   $('rpMic').addEventListener('click', micClick);
   $('rpVoiceOff').addEventListener('click', function () { if (Voice) Voice.stop(); roomMsg(''); renderRoom(); });
-  $('rpVidVol').addEventListener('input', function () {
-    var v = Math.max(0, Math.min(100, +$('rpVidVol').value || 0));
-    try { if (S.player && S.player.setVolume) { S.player.setVolume(v); if (v > 0 && S.player.isMuted && S.player.isMuted()) S.player.unMute(); } } catch (e) { /* ignora */ }
-  });
+  $('rpHear').addEventListener('click', toggleHear);
+  $('rpVidVol').addEventListener('input', function () { setVideoVolume(+$('rpVidVol').value || 0); });
   $('rpVoiceVol').addEventListener('input', function () { if (Voice) Voice.masterVolume((+$('rpVoiceVol').value || 0) / 100); });
   $('rpMembers').addEventListener('input', function (e) {
     var t = e.target;
@@ -598,6 +891,8 @@
     var pb = $('bRoomQ');                                              // numero de videos na fila, no botao da barra
     pb.hidden = !n;
     pb.textContent = n > 9 ? '9+' : String(n);
+    if (menuIsOpen()) renderMenu();
+    pushTb();
     if (!force && sig === S.qSig) return;
     S.qSig = sig;
     $('rpQWho').textContent = local ? 'Sua fila · só neste computador' : 'Fila da sala · todos veem a mesma';
@@ -868,6 +1163,7 @@
   // mostra o modo certo (a janela do site fica por conta do programa, por baixo da barra)
   function setMode(name) {
     if (name !== 'youtube' && name !== 'spotify') name = 'player';
+    if (name !== S.mode) closeMenu(false);                          // trocou de tela (pelo teclado, por exemplo): o menu aberto nao fica para tras
     S.mode = name;
     body.classList.toggle('browse', name !== 'player');
     body.classList.toggle('mod-youtube', name === 'youtube');
@@ -1061,6 +1357,7 @@
 
   // stay: o video do proximo da fila toca por tras sem tirar a pessoa da pesquisa (o audio continua)
   function play(info, stay) {
+    if (S.current && !S.histNav && histKey(S.current) !== histKey(info)) pushHist(S.current);   // o que tocava vira o "anterior"
     S.current = info;
     S.qIdle = false;                                                 // tem video tocando: a fila so comeca sozinha quando ele acabar
     S.fromQueue = null;                                              // (playQueued marca de novo logo depois, se foi a fila que escolheu)
@@ -1073,6 +1370,7 @@
     body.classList.add('playing');
     setTitle('Carregando…');
     refreshUi();
+    pushTb();
 
     if (window.YT && window.YT.Player) S.apiReady = true;
     if (!S.apiReady) { S.pending = info; requestApi(); return; }
@@ -1144,6 +1442,7 @@
     // 0 = acabou, 1 = tocando, 3 = carregando, 5 = pronto
     if (e && e.data === 0) onVideoEnded();
     if (e && (e.data === 1 || e.data === 3 || e.data === 5)) updateTitleFromPlayer();
+    pushTb();                                                        // o botao play/pause da miniatura acompanha o player
   }
 
   // o video acabou: passa para o proximo da fila. Na sala varias pessoas pedem ao mesmo tempo e so a primeira vale;
@@ -1200,6 +1499,7 @@
     $('errOpen').style.display = S.current ? '' : 'none';
     body.classList.add('err');
     refreshUi();
+    pushTb();
   }
 
   function clearError() {
@@ -1245,12 +1545,54 @@
     toast(S.pin ? 'Sempre por cima: ligado' : 'Sempre por cima: desligado');
     focusPlayer();
   });
-  $('bOp').addEventListener('click', function () {
-    S.opacity = nextOpacity();
+  // menu ≡ (na barra do video e na barra do modo navegacao)
+  function toggleMenu() { if (menuIsOpen()) closeMenu(true); else openMenu(); }
+  $('bMenu').addEventListener('click', toggleMenu);
+  $('mMenu').addEventListener('click', toggleMenu);
+  // transparencia: a janela mostra o efeito enquanto a barra e arrastada (de 10 a 100%)
+  $('mnOp').addEventListener('pointerdown', function () { if (!S.opDrag) { S.opDrag = true; toHost('opdrag:1'); } });
+  $('mnOp').addEventListener('input', function () {
+    var v = Math.max(10, Math.min(100, +$('mnOp').value || 100));
+    S.opacity = v / 100;
     renderOpacity();
-    toHost('op:' + S.opacity);
-    toast('Transparência: ' + Math.round(S.opacity * 100) + '%');
-    focusPlayer();
+    toHost('op:' + S.opacity.toFixed(2));
+  });
+  window.addEventListener('pointerup', endOpDrag);
+  window.addEventListener('pointercancel', endOpDrag);
+  // volume do video no menu: barra, botao de som e a rodinha do mouse (de 5 em 5)
+  $('mnVol').addEventListener('input', function () { setVideoVolume(+$('mnVol').value || 0); });
+  $('mnMute').addEventListener('click', toggleVideoMute);
+  $('mnVol').addEventListener('wheel', function (e) {                 // (so sobre a barra: no resto o menu rola normalmente)
+    var cur = videoVolume();
+    if (cur === null) return;
+    e.preventDefault();
+    setVideoVolume(Math.round(cur / 5) * 5 + (e.deltaY < 0 ? 5 : -5));
+  }, { passive: false });
+  setInterval(function () { if (menuIsOpen()) syncVolumes(); }, 700);   // o YouTube nao avisa quando o volume muda pelas teclas dele (M, setas)
+  // clicar fora do menu ou tirar o foco da janela fecha o menu
+  document.addEventListener('pointerdown', function (e) {
+    if (!menuIsOpen()) return;
+    if (e.target && e.target.closest && e.target.closest('#menu, #bMenu, #mMenu')) return;
+    closeMenu(false);
+  }, true);
+  window.addEventListener('blur', function () { endOpDrag(); closeMenu(false); });
+  function menuAct(fn) { return function () { closeMenu(false); fn(); }; }
+  $('mnSearch').addEventListener('click', menuAct(openOmnibox));
+  $('mnRoom').addEventListener('click', menuAct(openRoomPanel));
+  $('mnMic').addEventListener('click', menuAct(micClick));
+  $('mnHear').addEventListener('click', menuAct(toggleHear));
+  $('mnSpeed').addEventListener('click', menuAct(function () { sendToFrame('reset'); }));
+  $('mnPin').addEventListener('click', menuAct(function () { $('bPin').click(); }));
+  $('menu').addEventListener('keydown', function (e) {                // setas para cima/baixo andam pelos itens
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (e.target && e.target.type === 'range') return;                // na barra as setas mudam o valor
+    var items = Array.prototype.filter.call($('menu').querySelectorAll('.mn-i, .mn-range'), function (b) { return !b.hidden && b.offsetParent !== null; });
+    var i = items.indexOf(document.activeElement);
+    var to = e.key === 'ArrowDown' ? i + 1 : i - 1;
+    if (to < 0) to = items.length - 1;
+    if (to >= items.length) to = 0;
+    e.preventDefault();
+    if (items[to]) items[to].focus();
   });
   $('bSpeed').addEventListener('click', function () {
     sendToFrame('reset');
@@ -1333,6 +1675,7 @@
   // teclado e area de transferencia (quando o foco esta nesta pagina; com o foco dentro do video quem trata e o programa)
   document.addEventListener('keydown', function (e) {
     var k = (e.key || '').toLowerCase();
+    if (k === 'escape' && menuIsOpen()) { closeMenu(true); return; }
     if (k === 'escape' && !$('roomPanel').hidden) { closeRoomPanel(); return; }
     if (k === 'escape' && S.current && body.classList.contains('home')) { closeHome(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'l') { e.preventDefault(); openOmnibox(); return; }
@@ -1389,6 +1732,8 @@
     });
   }
 
+  window.addEventListener('resize', fitBarIfNeeded);
+  setInterval(pushTb, 1000);                                         // rede de seguranca: a miniatura da barra de tarefas sempre acompanha
   renderPin();
   renderOpacity();
   renderRoom();

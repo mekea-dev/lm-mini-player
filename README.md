@@ -1,6 +1,6 @@
 # LM Mini Player
 
-Mini player de YouTube para Windows que fica **por cima de tudo**. Cole o link, arraste para onde quiser e deixe do tamanho que preferir: a interface se adapta a qualquer tamanho de janela, do minúsculo ao enorme. Dá para **pesquisar no YouTube aqui dentro** (sem abrir o navegador) e ouvir o **Spotify** como módulo extra. E dá para **assistir junto com os amigos numa sala**: o vídeo fica sincronizado e vocês conversam por voz, com o volume do vídeo e o das vozes separados.
+Mini player de YouTube para Windows que fica **por cima de tudo**. Cole o link, arraste para onde quiser e deixe do tamanho que preferir: a interface se adapta a qualquer tamanho de janela, do minúsculo ao enorme. Dá para **pesquisar no YouTube aqui dentro** (sem abrir o navegador) e ouvir o **Spotify** como módulo extra. E dá para **assistir junto com os amigos numa sala**: o vídeo fica sincronizado e vocês conversam por voz, com o volume do vídeo e o das vozes separados. A janela pode ficar **transparente** (de 10 a 100%) sem você perdê-la, e o programa tem **botões na miniatura da barra de tarefas** (anterior, play/pause, próxima, microfone, fone e volume).
 
 ![Tela inicial](docs/tela-inicial.png)
 
@@ -34,7 +34,7 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 |---|---|
 | Tocar um vídeo | Copie o link e abra o programa (se já houver um link do YouTube copiado, ele toca direto). Ou, com a janela em foco, aperte **Ctrl+V** |
 | Trocar de vídeo | **Ctrl+V** de novo, o botão de colar da barra, ou **Ctrl+L** para pesquisar ou digitar o link |
-| Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: uma **lista de resultados** aparece no programa, como no YouTube (miniatura, duração, título, canal, visualizações e data; rolar até o fim carrega mais). Clique num vídeo para tocar no player (com a velocidade livre e tudo mais); o **+** põe na [fila](#fila-de-vídeos). Link colado no campo toca direto. **Ver no site do YouTube** (e **Explorar YouTube**, ou a casinha da barra) abrem o site de verdade |
+| Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: uma **lista de resultados** aparece no programa, como no YouTube (miniatura, duração, título, canal, visualizações e data; rolar até o fim carrega mais). Clique num vídeo para tocar no player (com a velocidade livre e tudo mais); o **+** põe na [fila](#fila-de-vídeos). Link colado no campo toca direto. **Ver no site do YouTube** (e o botão **YouTube** da tela inicial, ou a casinha da barra) abrem o site de verdade |
 | Ouvir Spotify | Botão **Spotify** na tela de pesquisa (ou a aba **Spotify** na barra do modo navegação). Entre na sua conta uma vez: suas playlists e músicas curtidas aparecem. Ele continua tocando quando você volta ao player |
 | Ver o mesmo vídeo com outras pessoas | Botão **Sala e fila** (ícone de pessoas, na barra e na tela inicial): escreva o seu nome e **Criar sala**, e passe o código de 8 letras e números; quem tem o código usa **Entrar**. Veja [Salas](#salas-assistir-junto) |
 | Conversar por voz na sala | Dentro da sala, o botão de **microfone** (na barra e no painel da sala). Veja [Conversar por voz](#conversar-por-voz) |
@@ -43,9 +43,11 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 | Redimensionar | Arraste **qualquer borda ou canto** (tamanho mínimo 240 × 135) |
 | Mudar a velocidade | **D** acelera e **S** desacelera (0,1× por toque; com **Shift**, 1×). **R** volta a 1× e, apertando de novo, à velocidade anterior. Vai de **0,07× a 16×** e fica lembrada. O selo na barra mostra o valor (clique nele para voltar a 1×) |
 | Voltar / avançar 10 s | **Z** / **X** |
-| Legendas, mudo, qualidade | Os botões do próprio YouTube, no **canto superior direito** (a barra do programa fica à esquerda para não cobri-los). Com o foco no vídeo, **C** liga e desliga as legendas |
-| Ver através da janela | Botão de **transparência** (100% → 85% → 70% → 55% → 40%) |
-| Deixar de ficar por cima | Botão de **alfinete** (vem ligado) |
+| Legendas e qualidade | Os botões do próprio YouTube, no **canto superior direito** (a barra do programa fica à esquerda para não cobri-los). Com o foco no vídeo, **C** liga e desliga as legendas |
+| Volume do vídeo | Menu **≡** → **Volume do vídeo** (barra de 0 a 100%, botão de som e a rodinha do mouse sobre a barra, de 5 em 5), ou os botões **−** e **+** na [miniatura da barra de tarefas](#controles-na-barra-de-tarefas). O controle de volume do próprio YouTube fica escondido (ele não funcionava bem numa janela pequena). A tecla **M** do YouTube (mudo) continua valendo com o foco no vídeo, e o menu acompanha |
+| Ver através da janela | Menu **≡** → **Transparência**: uma barra de **10 a 100%**. Veja [Menu, transparência e modo fantasma](#menu-transparência-e-modo-fantasma) |
+| Menu com tudo da barra | Botão **≡** (o primeiro da barra). Em janelas pequenas a barra mostra menos botões, e o menu tem todos: pesquisar, sala e fila, microfone, fone, sempre por cima e velocidade |
+| Deixar de ficar por cima | Botão de **alfinete** (vem ligado), ou **Sempre por cima** no menu |
 | Tela cheia | Botão de tela cheia do próprio YouTube; **Esc** volta ao tamanho de antes |
 | Minimizar / fechar | Botões da barra |
 
@@ -59,6 +61,43 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 - O YouTube e o Spotify tocam ao mesmo tempo se você deixar os dois tocando: pause um deles. Os atalhos de velocidade (D, S, R, X, Z) valem só para o YouTube.
 - Para o Spotify (ou os resultados do YouTube) ficar maior, é só aumentar a janela: o site ocupa tudo abaixo da barra.
 - O **Ctrl+V e as teclas de velocidade valem quando a janela do mini player está em foco** (clique nela uma vez). Não são atalhos globais.
+
+## Menu, transparência e modo fantasma
+
+![O menu ≡ com a barra de transparência e o volume do vídeo](docs/menu.png)
+
+O botão **≡** (o primeiro da barra de cima) abre um **menu suspenso** que cabe até na janela mínima (ele rola se a janela for baixa). Nele:
+
+- **Transparência**, uma barra de **10 a 100%** (como a de volume). Enquanto você arrasta, a janela já mostra o resultado.
+- **Volume do vídeo**: a barra, o botão de som e a rodinha do mouse sobre a barra (de 5 em 5).
+- **Pesquisar ou colar link**, **Sala e fila** (com o número de vídeos na fila), **Microfone** e **Fone** (dentro de uma sala), **voltar à velocidade 1×** (quando a velocidade não é 1×) e **Sempre por cima**.
+
+Quando a janela fica estreita, a barra de cima mostra só os botões que cabem (sempre ficam o **≡**, a área de arrastar, minimizar e fechar) e **tudo o que sai da barra continua no menu**. Fecha com **Esc**, clicando fora ou ao tirar o foco da janela. Também existe na barra do modo navegação (pesquisa e Spotify); lá o site sai da frente enquanto o menu está aberto.
+
+### Modo fantasma
+
+Com **50% ou menos** de visibilidade a janela vira "fantasma", para você não perdê-la e, ao mesmo tempo, ela não ficar aparecendo toda hora:
+
+- A janela some quase por completo e fica **só uma alça pequena (≡) no canto de cima**. Passar o mouse sobre a janela **não** a revela; passar o mouse **na alça** revela a janela inteira e a barra de cima, e **clicar na alça** abre o menu.
+- Revelada, ela fica inteira enquanto você usa. Volta a ser fantasma quando o mouse **sai** da janela ou fica **parado por uns 3 segundos**.
+- Qualquer tela do programa por cima do vídeo (menu, sala e fila, pesquisa, Spotify, erro, janela vazia, tela cheia do YouTube) aparece inteira: a janela só fica transparente **enquanto você assiste**.
+- Acima de 50% é só uma janela mais clara: não há alça e a barra aparece quando o mouse mexe, como sempre.
+- A transparência escolhida fica lembrada; se a janela abrir em modo fantasma, ela nasce inteira e some depois que o vídeo começa.
+
+## Controles na barra de tarefas
+
+Passe o mouse no ícone do programa na barra de tarefas do Windows: a miniatura tem **sete botões**, como o Spotify, para controlar o vídeo sem abrir a janela:
+
+| Botão | O que faz |
+|---|---|
+| ⏮ **Anterior** | Depois de 3 segundos de vídeo, volta ao começo dele; logo no começo, volta ao vídeo que tocava antes (ou ao item anterior de uma playlist). Numa sala, vale para todos, como colar um link |
+| ▶ / ⏸ **Reproduzir / Pausar** | Toca ou pausa (numa sala, para todos) |
+| ⏭ **Próximo** | Toca o próximo da fila (na sala, para todos) ou o próximo da playlist. Fica cinza quando não há mais nada |
+| 🎤 **Microfone** | Dentro de uma sala: entra na voz, silencia e liga o microfone. Verde = ligado, vermelho = mudo |
+| 🎧 **Fone** | Dentro da voz: **para de ouvir** as pessoas da sala (e volta a ouvir). O microfone e o volume do vídeo não mudam, e quem está falando continua com o contorno verde. Sair da voz volta ao normal |
+| 🔉 **Volume −** e 🔊 **Volume +** | Volume do vídeo, de 5 em 5%, com um aviso na janela |
+
+Os botões do microfone e do fone ficam cinza fora de uma sala (e o do fone, fora da voz). Os ícones acompanham o tema claro ou escuro do Windows.
 
 ## Fila de vídeos
 
@@ -140,16 +179,18 @@ O player oficial do YouTube só aceita de 0,25× a 2×. Para ir de 0,07× a 16×
 
 A **lista de resultados** da pesquisa é desenhada pelo próprio programa: uma janela auxiliar do WebView2, **escondida** (nunca aparece), carrega uma página do youtube.com e um script (`web/yt-search.js`) pede os resultados ao YouTube como o navegador faz, lê a lista de vídeos e devolve para a tela (`web/yt.js`). Se o YouTube mudar o formato, só esse arquivo precisa mudar. O **site do YouTube** (botão "Ver no site") e o **Spotify** são **módulos**: cada um abre o site numa janela do WebView2, criada só quando você usa, **por cima** da janela principal e por baixo da barra do programa. No site do YouTube, um script (`web/yt-browse.js`) captura o clique num vídeo e manda o link para o seu player. O Spotify é o player web dele (o WebView2 tem a DRM Widevine que ele exige).
 
+A **barra de cima** mede a si mesma: a função `fitBar()` (em `web/app.js`) tira da barra, na ordem de prioridade, o que não cabe na largura da janela (sem deixar nenhum botão cortado); o menu ≡ tem tudo o que sai. O **modo fantasma** (`src/Ghost.cs`) usa uma janelinha própria para a alça, com transparência por pixel, e a página avisa quando há uma tela por cima do vídeo. Os **botões da miniatura** (`src/Taskbar.cs`) usam a interface `ITaskbarList3` do Windows, sem biblioteca nenhuma: os ícones são desenhados no próprio programa, e quem decide o que cada botão faz (e o estado dele) é a página.
+
 A **atualização automática** (`src/Updater.cs`) lê o último release pela API do GitHub, baixa o `.zip`, confere o SHA-256 que o GitHub informa, descompacta numa pasta de espera e, na hora de instalar, copia os arquivos novos ao lado dos antigos, renomeia os antigos para `.old` (o Windows deixa renomear um programa em execução) e abre a versão nova. Ela precisa dar sinal de vida em 20 s; se não der, é fechada e tudo volta ao que era. Em pasta de desenvolvimento (com `build.ps1` ou `.git` ao lado do `.exe`) a atualização fica desligada, para nunca trocar arquivos por cima do código-fonte.
 
 As **salas** (`web/room.js`, `relay/`) usam um pequeno servidor (um Cloudflare Worker com um Durable Object por sala) e uma conexão WebSocket aberta para cada pessoa: ele guarda só o estado da sala (vídeo, posição, tocando ou pausado, velocidade) e leva as mensagens entre as pessoas, então tudo chega na hora. A **fila** também fica no servidor (id do vídeo, título e quem adicionou), e o servidor decide o próximo quando o vídeo acaba: todo mundo avisa "acabou" e só o primeiro aviso vale (cada troca de vídeo tem um contador). O relógio de cada computador é medido contra o do servidor para manter o vídeo no mesmo ponto. A **voz** (`web/voice.js`) é WebRTC em malha: cada par de pessoas na voz abre uma conexão direta de áudio (o servidor só leva as mensagens de combinação), e cada pessoa remota toca num `<audio>` próprio, de onde vêm o volume e o silenciar por pessoa. Veja `relay/LEIA-ME.md`.
 
 ```
 lm-mini-player/
-├─ src/        Program.cs (a janela), Updater.cs (atualização automática), manifesto e ícone
+├─ src/        Program.cs (a janela), Ghost.cs (transparência e modo fantasma), Taskbar.cs (botões da miniatura da barra de tarefas), Updater.cs (atualização automática), manifesto e ícone
 ├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), room.js (salas e fila da sala), queue.js (a sua fila, neste computador), voice.js (voz), yt.js e yt-search.js (a lista de resultados da pesquisa), speed-frame.js (velocidade e salas dentro do player) e yt-browse.js (cliques no site do YouTube)
 ├─ relay/      o servidor de salas (worker.js, wrangler.jsonc) e o guia para montá-lo
-├─ tests/      links.html (leitor de links), room-test.html (servidor de salas e fila), yt-test.html (leitura dos resultados da pesquisa, com uma amostra real em yt-fixture.json) e queue-test.html (a sua fila)
+├─ tests/      links.html (leitor de links), room-test.html (servidor de salas e fila), yt-test.html (leitura dos resultados da pesquisa, com uma amostra real em yt-fixture.json), queue-test.html (a sua fila) pill-test.html (a barra de cima em 121 larguras) e home-test.html (a tela inicial)
 ├─ docs/       imagens deste README
 ├─ build.ps1   compila (e empacota com -Package)
 ├─ CHANGELOG.md  o que mudou em cada versão (vira as notas do release)
@@ -163,11 +204,12 @@ Só precisa do Windows (usa o compilador C# que já vem nele). O `build.ps1` bai
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1            # gera LMMiniPlayer.exe
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Package   # e também o .zip em dist\
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Out C:\teste  # grava o .exe em outra pasta (não mexe no do projeto)
 ```
 
 **Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` e `AssemblyFileVersion` em `src/Program.cs` (os três têm de bater com a tag: a atualização automática recusa um pacote cuja versão interna não é a anunciada, e o workflow confere isso antes de compilar), acrescente a seção da versão no `CHANGELOG.md`, faça o commit e envie uma tag (`git tag -a v1.4.0 -m "..." && git push origin v1.4.0`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o histórico da versão e o SHA-256 nas notas.
 
-**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** com o mesmo servidor, abra <http://localhost:8000/tests/room-test.html> (mostra "OK 98/98" no título; roda o código real do servidor com um ambiente de mentira, sem rede). **Testes da pesquisa do YouTube:** <http://localhost:8000/tests/yt-test.html> ("OK 50/50"). **Testes da sua fila:** <http://localhost:8000/tests/queue-test.html> ("OK 32/32"). Detalhes no fim de `relay/LEIA-ME.md`.
+**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** com o mesmo servidor, abra <http://localhost:8000/tests/room-test.html> (mostra "OK 98/98" no título; roda o código real do servidor com um ambiente de mentira, sem rede). **Testes da pesquisa do YouTube:** <http://localhost:8000/tests/yt-test.html> ("OK 50/50"). **Testes da sua fila:** <http://localhost:8000/tests/queue-test.html> ("OK 32/32"). **Testes da barra de cima** (nenhum botão cortado de 240 a 720 px, na ordem certa): <http://localhost:8000/tests/pill-test.html> ("OK 6/6"). **Testes da tela inicial** (os quatro atalhos numa linha só e sem barra de rolagem): <http://localhost:8000/tests/home-test.html> ("OK 3/3"). Detalhes no fim de `relay/LEIA-ME.md`.
 
 ## Créditos e avisos
 
