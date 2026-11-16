@@ -6,13 +6,18 @@
  *     e avisa todo mundo NA HORA quando alguem mexe (sem ficar perguntando a cada segundo);
  *   - sabe quem esta na sala: quem fecha o programa ou sai some para os outros no mesmo instante;
  *   - leva as mensagens de "sinalizacao" da voz (WebRTC) de uma pessoa para outra. O AUDIO nao passa
- *     por aqui: vai direto entre os computadores.
+ *     por aqui: vai direto entre os computadores;
+ *   - guarda a FILA de videos da sala (ate 50): qualquer pessoa adiciona, reordena, remove ou toca um item;
+ *     quando o video acaba, a sala passa sozinha para o proximo da fila.
  * Nao transmite video: cada pessoa toca o proprio video do YouTube.
  *
  * Conexao (WebSocket):  GET /ws/<CODIGO>?id=<id>&name=<nome>[&create=1]
- *   servidor -> pessoa:  hello {now,you,v,state,members} | join {m} | leave {id} | member {m} | state {v,state,now}
- *                        sig {from,data} | pong {c,now} | err {error}
- *   pessoa -> servidor:  set {st} | name {name} | voice {on,muted} | sig {to,data} | ping {c}
+ *   servidor -> pessoa:  hello {now,you,v,state,members,q} | join {m} | leave {id} | member {m} | state {v,state,now}
+ *                        queue {q,ev} | qerr {error} | sig {from,data} | pong {c,now} | err {error}
+ *   pessoa -> servidor:  set {st,ld?} | name {name} | voice {on,muted} | sig {to,data} | ping {c}
+ *                        qadd {vid,title,at?} | qmove {id,to} | qremove {id} | qplay {id} | qnext {lid} | qclear
+ *   state.lid conta as trocas de video: "qnext" so vale se levar o lid atual (varias pessoas veem o video acabar
+ *   ao mesmo tempo e todas pedem o proximo: so a primeira conta).
  *   codigos de fechamento: 4400 pedido ruim, 4404 sala nao existe, 4409 sala ja existe, 4413 sala cheia,
  *                          4429 mensagens demais, 4000 trocada por outra conexao da mesma pessoa
  *
@@ -32,6 +37,8 @@ const TTL_MS = 24 * 3600 * 1000;               // sala sem uso por 24 h some
 const MAX_MEMBERS = 8;                         // voz em malha: 8 pessoas ja sao 28 conexoes
 const MAX_MSG = 8192;                          // bytes por mensagem
 const MAX_NAME = 24;
+const MAX_QUEUE = 50;                          // videos na fila da sala
+const MAX_TITLE = 100;                         // letras do titulo de um video da fila
 const LEGACY_ACTIVE_MS = 30000;                // programa antigo "esta na sala" = apareceu nos ultimos 30 s
 const RATE_WINDOW_MS = 10000;
 const RATE_MAX = 400;                          // mensagens por janela, por conexao
@@ -70,17 +77,19 @@ function cleanState(s) {
   };
 }
 
-// nome que aparece para os outros: sem caracteres de controle nem de direcao de texto, espacos arrumados, ate 24 letras
-function cleanName(n) {
+// texto que aparece para os outros: sem caracteres de controle nem de direcao de texto, espacos arrumados, ate "max" letras
+function cleanText(n, max) {
   let out = '';
   for (const ch of (typeof n === 'string' ? n : '')) {
     const c = ch.codePointAt(0);
     if (c < 32 || (c >= 0x7f && c <= 0x9f) || (c >= 0x200b && c <= 0x200f) || (c >= 0x2028 && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069)) continue;
     out += ch;
   }
-  const s = Array.from(out.replace(/\s+/g, ' ').trim()).slice(0, MAX_NAME).join('');
-  return s || 'Visitante';
+  return Array.from(out.replace(/\s+/g, ' ').trim()).slice(0, max).join('');
 }
+
+function cleanName(n) { return cleanText(n, MAX_NAME) || 'Visitante'; }
+function cleanTitle(t) { return cleanText(t, MAX_TITLE); }
 
 function pub(a) { return { id: a.id, name: a.name, voice: !!a.voice, muted: !!a.muted }; }
 
@@ -106,11 +115,21 @@ export default {
 export class Room extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.data = null;                 // { v, state, created, updated }; null = a sala nao existe
+    this.data = null;                 // { v, state, created, updated, q, qn, lid, idleLid }; null = a sala nao existe
     this.legacy = new Map();          // programas antigos (HTTP): id -> ultima vez visto
     this.rate = new WeakMap();        // conexao -> { n, t }
     this.grace = new Map();           // id -> temporizador: pessoa cuja conexao caiu e ainda pode voltar
-    ctx.blockConcurrencyWhile(async () => { this.data = (await ctx.storage.get('room')) || null; });
+    ctx.blockConcurrencyWhile(async () => {
+      this.data = (await ctx.storage.get('room')) || null;
+      const d = this.data;
+      if (d) {                                                        // sala guardada por uma versao sem fila
+        if (!Array.isArray(d.q)) d.q = [];
+        d.qn = d.qn | 0;
+        d.lid = d.lid | 0;
+        if (typeof d.idleLid !== 'number') d.idleLid = -1;
+        if (d.state && d.state.lid === undefined) d.state.lid = d.lid;
+      }
+    });
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));   // "estou aqui" sem acordar a sala
   }
 
@@ -124,10 +143,12 @@ export class Room extends DurableObject {
 
   async create() {
     const now = Date.now();
-    this.data = { v: 0, state: null, created: now, updated: now };
+    this.data = { v: 0, state: null, created: now, updated: now, q: [], qn: 0, lid: 0, idleLid: -1 };
     await this.ctx.storage.put('room', this.data);
     await this.ctx.storage.setAlarm(now + TTL_MS);
   }
+
+  async save() { await this.ctx.storage.put('room', this.data); }
 
   open() {
     return this.ctx.getWebSockets().filter(function (s) { return s.readyState === 1; });
@@ -151,16 +172,106 @@ export class Room extends DurableObject {
     }
   }
 
-  async applySet(st, by) {
+  // "load" = a pessoa carregou um video (mesmo que seja o mesmo de antes); trocar de video ou de lista tambem conta.
+  // O lid conta essas trocas: so a primeira pessoa a pedir o "proximo da fila" depois de um video acabar vale.
+  async applySet(st, by, load) {
     const now = Date.now();
+    const prev = this.data.state;
+    if (load || !prev || prev.vid !== st.vid || prev.list !== st.list) this.data.lid += 1;
     st.at = now;
     st.by = by;
+    st.lid = this.data.lid;
     this.data.v += 1;
     this.data.state = st;
     this.data.updated = now;
     await this.ctx.storage.put('room', this.data);
     this.broadcast({ t: 'state', v: this.data.v, state: st, now: now });
     return st;
+  }
+
+  // ---------- fila ----------
+
+  queueOut() {
+    return this.data.q.map(function (it) { return { id: it.id, vid: it.vid, title: it.title, by: it.by }; });
+  }
+
+  // ev diz o que aconteceu (para os outros mostrarem "Ana adicionou ...")
+  broadcastQueue(ev) { this.broadcast({ t: 'queue', q: this.queueOut(), ev: ev || null }); }
+
+  // poe um video para tocar: do comeco, tocando, na mesma velocidade da sala
+  async playVid(vid, by) {
+    const prev = this.data.state;
+    await this.applySet({ vid: vid, list: null, pos: 0, playing: true, rate: prev && prev.rate ? prev.rate : 1 }, by, true);
+  }
+
+  indexOfItem(id) {
+    for (let i = 0; i < this.data.q.length; i++) if (this.data.q[i].id === id) return i;
+    return -1;
+  }
+
+  async qAdd(ws, me, m) {
+    const vid = typeof m.vid === 'string' ? m.vid : '';
+    if (!VID_RE.test(vid)) return;
+    const q = this.data.q;
+    if (q.length >= MAX_QUEUE) { try { ws.send(JSON.stringify({ t: 'qerr', error: 'full' })); } catch (e) { /* ignora */ } return; }
+    const item = { id: 'q' + (++this.data.qn), vid: vid, title: cleanTitle(m.title), by: me.name };
+    const at = Number.isInteger(m.at) ? Math.max(0, Math.min(q.length, m.at)) : q.length;
+    q.splice(at, 0, item);
+    this.data.updated = Date.now();
+    if (!this.data.state || this.data.idleLid === this.data.lid) {   // nada tocando (ou o video acabou sem proximo): o que entra comeca a tocar
+      const first = q.shift();
+      await this.playVid(first.vid, me.id);
+      this.broadcastQueue({ k: 'play', n: me.name, by: me.id, title: first.title });
+      return;
+    }
+    await this.save();
+    this.broadcastQueue({ k: 'add', n: me.name, by: me.id, title: item.title });
+  }
+
+  async qMove(m) {
+    const q = this.data.q;
+    const i = this.indexOfItem(m.id);
+    if (i < 0 || !Number.isInteger(m.to)) return;
+    const to = Math.max(0, Math.min(q.length - 1, m.to));
+    if (to === i) return;
+    q.splice(to, 0, q.splice(i, 1)[0]);
+    this.data.updated = Date.now();
+    await this.save();
+    this.broadcastQueue({ k: 'move' });
+  }
+
+  async qRemove(m) {
+    const i = this.indexOfItem(m.id);
+    if (i < 0) return;
+    this.data.q.splice(i, 1);
+    this.data.updated = Date.now();
+    await this.save();
+    this.broadcastQueue({ k: 'remove' });
+  }
+
+  async qClear() {
+    if (!this.data.q.length) return;
+    this.data.q = [];
+    this.data.updated = Date.now();
+    await this.save();
+    this.broadcastQueue({ k: 'clear' });
+  }
+
+  async qPlay(me, m) {
+    const i = this.indexOfItem(m.id);
+    if (i < 0) return;
+    const it = this.data.q.splice(i, 1)[0];
+    await this.playVid(it.vid, me.id);
+    this.broadcastQueue({ k: 'play', n: me.name, by: me.id, title: it.title });
+  }
+
+  // o video acabou: passa para o proximo. Varias pessoas pedem ao mesmo tempo; so vale quem leva o lid atual.
+  async qNext(me, m) {
+    if (Number(m.lid) !== this.data.lid) return;
+    const it = this.data.q.shift();
+    if (!it) { this.data.idleLid = this.data.lid; await this.save(); return; }     // acabou e nao ha proximo: a sala fica parada
+    await this.playVid(it.vid, me.id);
+    this.broadcastQueue({ k: 'next', title: it.title });
   }
 
   // ---------- WebSocket ----------
@@ -203,7 +314,7 @@ export class Room extends DurableObject {
     this.ctx.storage.put('room', this.data);
 
     server.send(JSON.stringify({
-      t: 'hello', now: Date.now(), you: id, v: this.data.v, state: this.data.state,
+      t: 'hello', now: Date.now(), you: id, v: this.data.v, state: this.data.state, q: this.queueOut(),
       members: others.map(function (s) { return pub(s.deserializeAttachment()); }).concat([pub(me)])
     }));
     if (!back) this.broadcast({ t: 'join', m: pub(me) }, server);
@@ -233,9 +344,15 @@ export class Room extends DurableObject {
         break;
       case 'set': {
         const st = cleanState(m.st);
-        if (st) await this.applySet(st, me.id);
+        if (st) await this.applySet(st, me.id, !!m.ld);
         break;
       }
+      case 'qadd': await this.qAdd(ws, me, m); break;
+      case 'qmove': await this.qMove(m); break;
+      case 'qremove': await this.qRemove(m); break;
+      case 'qplay': await this.qPlay(me, m); break;
+      case 'qnext': await this.qNext(me, m); break;
+      case 'qclear': await this.qClear(); break;
       case 'name':
         me.name = cleanName(m.name);
         ws.serializeAttachment(me);

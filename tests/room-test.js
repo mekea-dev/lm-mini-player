@@ -299,4 +299,113 @@ lg.room.legacy.set(B, Date.now() - 45000);
 x = await http(lg.room, 'GET', '/api/room/ABCDEFGH?since=1&id=' + A);
 check('HTTP: programa antigo que sumiu ha mais de 30 s deixa de contar', x.json.members === 2, x);
 
+// ---- fila da sala (videos para tocar a seguir, compartilhada) ----
+const V1 = 'aaaaaaaaaaa', V2 = 'bbbbbbbbbbb', V3 = 'ccccccccccc', V4 = 'ddddddddddd';
+const vids = function (m) { return m.q.map(function (i) { return i.vid; }).join(','); };
+const qr = await newRoom();
+const qa = await connect(qr.room, A, 'Ana', true);
+const qb = await connect(qr.room, B, 'Bia', false);
+check('fila: o hello traz a fila (vazia no comeco) e o estado nasce sem lid', Array.isArray(qa.ws.last('hello').q) && qa.ws.last('hello').q.length === 0 && qb.ws.last('hello').q.length === 0, qa.ws.last('hello'));
+await say(qr.room, qa.ws, { t: 'qadd', vid: V1, title: 'Primeiro' });
+let qs1 = qb.ws.last('state'), qq1 = qb.ws.last('queue');
+check('fila: sala sem nenhum video: o que entra na fila comeca a tocar na hora (a fila continua vazia)',
+  qs1 && qs1.state.vid === V1 && qs1.state.playing === true && qs1.state.pos === 0 && qs1.state.lid === 1 && qs1.state.by === A && qq1 && qq1.q.length === 0 && qq1.ev.k === 'play' && qq1.ev.n === 'Ana', [qs1, qq1]);
+await say(qr.room, qb.ws, { t: 'qadd', vid: V2, title: 'Segundo' });
+let qm = qa.ws.last('queue');
+check('fila: com algo tocando, adiciona no fim e todos recebem (item com id, video, titulo e quem adicionou)',
+  qm.q.length === 1 && qm.q[0].vid === V2 && qm.q[0].title === 'Segundo' && qm.q[0].by === 'Bia' && /^q\d+$/.test(qm.q[0].id) && qm.ev.k === 'add' && qm.ev.n === 'Bia' && qm.ev.title === 'Segundo', qm);
+await say(qr.room, qa.ws, { t: 'qadd', vid: V3, title: 'Terceiro' });
+await say(qr.room, qa.ws, { t: 'qadd', vid: V4, title: 'Quarto', at: 0 });
+qm = qb.ws.last('queue');
+check('fila: "at" poe o item no lugar pedido (0 = o proximo a tocar)', vids(qm) === [V4, V2, V3].join(','), qm);
+const idV3 = qm.q[2].id;
+await say(qr.room, qa.ws, { t: 'qmove', id: idV3, to: 0 });
+check('fila: mover leva o item para a posicao pedida e avisa todos', vids(qb.ws.last('queue')) === [V3, V4, V2].join(',') && vids(qa.ws.last('queue')) === [V3, V4, V2].join(','), qb.ws.last('queue'));
+await say(qr.room, qa.ws, { t: 'qmove', id: idV3, to: 99 });
+check('fila: mover para alem do fim vai para o fim', vids(qb.ws.last('queue')) === [V4, V2, V3].join(','), qb.ws.last('queue'));
+const nQ = qb.ws.all('queue').length;
+await say(qr.room, qa.ws, { t: 'qmove', id: 'q999', to: 0 });
+await say(qr.room, qa.ws, { t: 'qmove', id: idV3, to: 'x' });
+await say(qr.room, qa.ws, { t: 'qmove', id: idV3, to: 2 });
+await say(qr.room, qa.ws, { t: 'qremove', id: 'q999' });
+await say(qr.room, qa.ws, { t: 'qplay', id: 'q999' });
+check('fila: mover/remover/tocar item que nao existe, destino ruim ou o mesmo lugar nao faz nada', qb.ws.all('queue').length === nQ, qb.ws.all('queue').length - nQ);
+await say(qr.room, qb.ws, { t: 'qremove', id: qb.ws.last('queue').q[1].id });
+check('fila: remover tira o item (V2) e avisa todos', vids(qa.ws.last('queue')) === [V4, V3].join(','), qa.ws.last('queue'));
+await say(qr.room, qa.ws, { t: 'set', st: { vid: V1, pos: 3, playing: true, rate: 1.5 } });
+const lidBefore = qa.ws.last('state').state.lid;
+check('lid: mexer no mesmo video (velocidade, pausa) nao muda o lid', lidBefore === 1, qa.ws.last('state'));
+await say(qr.room, qa.ws, { t: 'qplay', id: qa.ws.last('queue').q[1].id });
+const sp = qb.ws.last('state');
+check('fila: tocar agora poe o video do item (V3) do comeco, tocando, na velocidade da sala, tira da fila e o lid sobe',
+  sp.state.vid === V3 && sp.state.pos === 0 && sp.state.playing === true && sp.state.rate === 1.5 && sp.state.lid === lidBefore + 1 && sp.state.by === A && vids(qb.ws.last('queue')) === V4 && qb.ws.last('queue').ev.k === 'play', [sp, qb.ws.last('queue')]);
+const lidNow = sp.state.lid;
+const nSt = qb.ws.all('state').length;
+await say(qr.room, qa.ws, { t: 'qnext', lid: lidNow });
+await say(qr.room, qb.ws, { t: 'qnext', lid: lidNow });
+check('fila: varias pessoas pedem o proximo ao mesmo tempo (o video acabou): so o primeiro pedido avanca',
+  qb.ws.all('state').length === nSt + 1 && qb.ws.last('state').state.vid === V4 && qb.ws.last('state').state.lid === lidNow + 1 && qb.ws.last('queue').q.length === 0 && qb.ws.last('queue').ev.k === 'next', [qb.ws.all('state').length - nSt, qb.ws.last('state')]);
+await say(qr.room, qb.ws, { t: 'qnext', lid: 1 });
+check('fila: pedido de proximo com lid velho e ignorado', qb.ws.last('state').state.vid === V4 && qb.ws.all('state').length === nSt + 1, qb.ws.last('state'));
+await say(qr.room, qa.ws, { t: 'qnext', lid: qb.ws.last('state').state.lid });
+check('fila: acabou e nao ha proximo: nada muda e a sala fica parada', qb.ws.all('state').length === nSt + 1 && qr.room.data.idleLid === qr.room.data.lid, [qb.ws.all('state').length - nSt, qr.room.data.idleLid, qr.room.data.lid]);
+await say(qr.room, qb.ws, { t: 'qadd', vid: V1, title: 'De novo' });
+check('fila: sala parada depois do fim: o que entra comeca a tocar na hora', qa.ws.last('state').state.vid === V1 && qa.ws.last('queue').q.length === 0 && qa.ws.last('queue').ev.k === 'play', qa.ws.last('state'));
+await say(qr.room, qa.ws, { t: 'qadd', vid: V2, title: 'Depois' });
+check('fila: depois de comecar a tocar de novo, o proximo item volta a esperar na fila', vids(qa.ws.last('queue')) === V2, qa.ws.last('queue'));
+const nQ2 = qa.ws.all('queue').length;
+await say(qr.room, qa.ws, { t: 'qadd', vid: 'curto', title: 'x' });
+await say(qr.room, qa.ws, { t: 'qadd', vid: 12345678901, title: 'x' });
+await say(qr.room, qa.ws, { t: 'qadd', title: 'sem video' });
+check('fila: item sem video valido e ignorado', qa.ws.all('queue').length === nQ2, qa.ws.all('queue').length - nQ2);
+await say(qr.room, qa.ws, { t: 'qadd', vid: V3, title: '  Titulo' + String.fromCharCode(7) + '   com   espacos ' + 'x'.repeat(200) });
+const tl = qa.ws.last('queue').q[1].title;
+check('fila: titulo limpo (sem controle, espacos arrumados) e limitado a 100 letras', tl.indexOf('Titulo com espacos x') === 0 && Array.from(tl).length === 100 && tl.indexOf(String.fromCharCode(7)) < 0, tl);
+await say(qr.room, qa.ws, { t: 'qadd', vid: V4 });
+check('fila: item sem titulo e aceito (titulo vazio)', qa.ws.last('queue').q[2].title === '' && qa.ws.last('queue').q[2].vid === V4, qa.ws.last('queue'));
+const late = await connect(qr.room, C, 'Caio', false);
+check('fila: quem entra depois recebe a fila (com titulos) no hello', late.ws.last('hello').q.length === 3 && late.ws.last('hello').q[0].title === 'Depois' && late.ws.last('hello').q[0].by === 'Ana', late.ws.last('hello').q);
+await say(qr.room, qb.ws, { t: 'qclear' });
+check('fila: limpar esvazia para todos', qa.ws.last('queue').q.length === 0 && late.ws.last('queue').q.length === 0 && qa.ws.last('queue').ev.k === 'clear', qa.ws.last('queue'));
+// lid nas trocas de video
+const lidr = await newRoom();
+const ls1 = await connect(lidr.room, A, 'Ana', true);
+const ls2 = await connect(lidr.room, B, 'Bia', false);
+await say(lidr.room, ls1.ws, { t: 'set', st: { vid: VID, pos: 0, playing: true, rate: 1 } });
+const lid1 = ls2.ws.last('state').state.lid;
+await say(lidr.room, ls1.ws, { t: 'set', st: { vid: VID, pos: 30, playing: false, rate: 1 } });
+check('lid: pausar ou pular no mesmo video nao muda o lid', ls2.ws.last('state').state.lid === lid1, ls2.ws.last('state'));
+await say(lidr.room, ls1.ws, { t: 'set', st: { vid: V2, pos: 0, playing: true, rate: 1 } });
+check('lid: trocar de video sobe o lid', ls2.ws.last('state').state.lid === lid1 + 1, ls2.ws.last('state'));
+await say(lidr.room, ls1.ws, { t: 'set', st: { vid: V2, pos: 0, playing: true, rate: 1 }, ld: 1 });
+check('lid: carregar o mesmo video de novo (ld) tambem sobe o lid', ls2.ws.last('state').state.lid === lid1 + 2, ls2.ws.last('state'));
+// limite de 50 itens
+const fq = await newRoom();
+const f1 = await connect(fq.room, A, 'Ana', true);
+await say(fq.room, f1.ws, { t: 'set', st: { vid: VID, pos: 0, playing: true, rate: 1 } });
+for (let i = 0; i < 50; i++) await say(fq.room, f1.ws, { t: 'qadd', vid: 'v' + String(i).padStart(10, '0'), title: 't' + i });
+check('fila: aceita 50 itens', fq.room.data.q.length === 50 && f1.ws.last('queue').q.length === 50, fq.room.data.q.length);
+const f2 = await connect(fq.room, B, 'Bia', false);
+await say(fq.room, f1.ws, { t: 'qadd', vid: V1, title: 'o 51' });
+check('fila: o 51o item e recusado, so quem pediu recebe o aviso (qerr full)', f1.ws.last('qerr') && f1.ws.last('qerr').error === 'full' && !f2.ws.last('qerr') && fq.room.data.q.length === 50, f1.ws.last('qerr'));
+// guardada e restaurada
+const pst = new Map(), pal = {};
+const p1 = await newRoom(pst, pal);
+const pa = await connect(p1.room, A, 'Ana', true);
+await say(p1.room, pa.ws, { t: 'set', st: { vid: VID, pos: 5, playing: true, rate: 1 } });
+await say(p1.room, pa.ws, { t: 'qadd', vid: V2, title: 'Salvo' });
+const p2 = await newRoom(pst, pal);
+const pb = await connect(p2.room, B, 'Bia', false);
+check('fila: continua depois de a sala "dormir" e acordar (vem no hello, com o lid do estado)', pb.ws.last('hello').q.length === 1 && pb.ws.last('hello').q[0].title === 'Salvo' && pb.ws.last('hello').state.lid === 1, pb.ws.last('hello'));
+await say(p2.room, pb.ws, { t: 'qnext', lid: 1 });
+check('fila: o "proximo" depois de acordar funciona (lid guardado)', pb.ws.last('state').state.vid === V2 && pb.ws.last('queue').q.length === 0, pb.ws.last('state'));
+// sala guardada por uma versao sem fila
+const ost = new Map();
+ost.set('room', { v: 4, state: { vid: VID, list: null, pos: 1, playing: true, rate: 1, at: Date.now(), by: A }, created: Date.now(), updated: Date.now() });
+const o1 = await newRoom(ost, {});
+const oa = await connect(o1.room, B, 'Bia', false);
+check('fila: sala guardada por versao sem fila abre com fila vazia e lid 0', oa.ws.last('hello').q.length === 0 && oa.ws.last('hello').state.lid === 0, oa.ws.last('hello'));
+await say(o1.room, oa.ws, { t: 'qadd', vid: V2, title: 'ok' });
+check('...e aceita itens normalmente', oa.ws.last('queue').q.length === 1, oa.ws.last('queue'));
+
 return JSON.stringify({ passed: results.filter(function (q) { return q.ok; }).length, failed: results.filter(function (q) { return !q.ok; }).length, results: results });
