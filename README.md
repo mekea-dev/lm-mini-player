@@ -34,10 +34,11 @@ A partir da **1.3.0** você não precisa baixar de novo a cada versão. Ao abrir
 |---|---|
 | Tocar um vídeo | Copie o link e abra o programa (se já houver um link do YouTube copiado, ele toca direto). Ou, com a janela em foco, aperte **Ctrl+V** |
 | Trocar de vídeo | **Ctrl+V** de novo, o botão de colar da barra, ou **Ctrl+L** para pesquisar ou digitar o link |
-| Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: os resultados do YouTube aparecem dentro do programa e, ao clicar num vídeo, ele toca no player (com a velocidade livre e tudo mais). Link colado no campo toca direto. **Explorar YouTube** abre a página inicial do site |
+| Pesquisar no YouTube | **Ctrl+L** (ou o botão da lupa), digite o que procura e **Enter**: uma **lista de resultados** aparece no programa, como no YouTube (miniatura, duração, título, canal, visualizações e data; rolar até o fim carrega mais). Clique num vídeo para tocar no player (com a velocidade livre e tudo mais); o **+** põe na [fila da sala](#fila-de-vídeos). Link colado no campo toca direto. **Ver no site do YouTube** (e **Explorar YouTube**, ou a casinha da barra) abrem o site de verdade |
 | Ouvir Spotify | Botão **Spotify** na tela de pesquisa (ou a aba **Spotify** na barra do modo navegação). Entre na sua conta uma vez: suas playlists e músicas curtidas aparecem. Ele continua tocando quando você volta ao player |
 | Ver o mesmo vídeo com outras pessoas | Botão **Sala** (ícone de pessoas, na barra e na tela inicial): escreva o seu nome e **Criar sala**, e passe o código de 8 letras e números; quem tem o código usa **Entrar**. Veja [Salas](#salas-assistir-junto) |
 | Conversar por voz na sala | Dentro da sala, o botão de **microfone** (na barra e no painel da sala). Veja [Conversar por voz](#conversar-por-voz) |
+| Fila de vídeos da sala | No painel da sala, a aba **Fila**: cole um link (ou use o **+** dos resultados), **arraste pelo cabo ⋮⋮** para mudar a ordem, **▶** toca na hora, **✕** tira. Quando o vídeo acaba, toca o próximo. Veja [Fila de vídeos](#fila-de-vídeos) |
 | Mover | Arraste pela **barra** no canto de cima (ela aparece quando o mouse mexe sobre a janela; arrasta de qualquer ponto dela, menos dos botões) |
 | Redimensionar | Arraste **qualquer borda ou canto** (tamanho mínimo 240 × 135) |
 | Mudar a velocidade | **D** acelera e **S** desacelera (0,1× por toque; com **Shift**, 1×). **R** volta a 1× e, apertando de novo, à velocidade anterior. Vai de **0,07× a 16×** e fica lembrada. O selo na barra mostra o valor (clique nele para voltar a 1×) |
@@ -76,6 +77,18 @@ Com uma sala, **todo mundo vê o mesmo vídeo ao mesmo tempo**: quem põe, pausa
 - Se a sua internet cair por alguns segundos, o programa reconecta sozinho e ninguém percebe. Passando de uns 5 segundos, você sai da lista e volta a aparecer quando a conexão voltar.
 - O servidor das salas é um pequeno serviço gratuito da Cloudflare que guarda só o estado da sala e leva as mensagens entre as pessoas. Detalhes e como montar o seu próprio: [`relay/LEIA-ME.md`](relay/LEIA-ME.md).
 
+### Fila de vídeos
+
+![A aba Fila do painel da sala, com os vídeos que vêm a seguir](docs/fila.png)
+
+Na aba **Fila** do painel da sala ficam os vídeos que **vêm a seguir**, e a lista é **a mesma para todo mundo da sala** (até 50 vídeos).
+
+- **Adicionar:** cole um link no campo da aba (ou aperte **Ctrl+V** com a aba aberta) ou use o **+** dos resultados da pesquisa. Cada item mostra a miniatura, o título e quem adicionou, e todos recebem o aviso "Ana adicionou à fila: …".
+- **Mudar a ordem:** **arraste pelo cabo ⋮⋮** (com o mouse) para antes ou depois de outro vídeo; todos veem a nova ordem na hora. Pelo teclado: foco no cabo e **↑ / ↓**.
+- **▶ Tocar agora** põe o vídeo para todos (ele sai da fila); **✕** tira da fila; **Limpar a fila** esvazia.
+- **Quando o vídeo acaba, a sala passa sozinha para o próximo da fila**, nos computadores de todos. Se a sala estava parada (sem vídeo, ou o último acabou e não havia próximo), o que for adicionado **já começa a tocar**.
+- Vídeos soltos da fila entram um a um; **playlists do YouTube** (link com `list=`) tocam como antes e passam sozinhas de um vídeo para o outro, sem mexer na fila.
+
 ### Conversar por voz
 
 Dentro da sala, o botão de **microfone** (na barra de cima e no painel da sala) liga a conversa por voz, como num Discord: todo mundo ouve todo mundo enquanto assiste. O programa só liga o microfone quando você clica.
@@ -100,7 +113,7 @@ Dentro da sala, o botão de **microfone** (na barra de cima e no painel da sala)
 ## Privacidade
 
 - Nenhuma conta, nenhum cadastro, nenhuma telemetria. O programa só conversa com o YouTube (player oficial e pesquisa), com o Spotify se você abrir o módulo, com o servidor de salas se você entrar numa sala e com o GitHub para ver se há versão nova.
-- **Salas:** só enquanto você está numa sala, o programa conversa com o servidor de salas (Cloudflare) e envia o código da sala, o ID do vídeo, a posição, se está tocando ou pausado, a velocidade, o **nome que você escolheu** para a sala (que os outros veem) e um identificador aleatório da janela (gerado na hora, não fica guardado no computador e não é você). Nada de e-mail ou conta. O Cloudflare enxerga o seu endereço IP, como qualquer servidor. Fora de uma sala, nada disso é enviado.
+- **Salas:** só enquanto você está numa sala, o programa conversa com o servidor de salas (Cloudflare) e envia o código da sala, o ID do vídeo, a posição, se está tocando ou pausado, a velocidade, o **nome que você escolheu** para a sala (que os outros veem), os vídeos da **fila** (id, título e nome de quem adicionou) e um identificador aleatório da janela (gerado na hora, não fica guardado no computador e não é você). Nada de e-mail ou conta. O Cloudflare enxerga o seu endereço IP, como qualquer servidor. Fora de uma sala, nada disso é enviado.
 - **Voz:** só se você clicar no microfone. O som vai **direto** entre os computadores da sala (WebRTC): não passa pelo servidor e não é gravado. Para isso, **quem está na voz enxerga o endereço IP das outras pessoas que também estão na voz** (é assim que a voz pela internet funciona; só entre amigos de confiança). O programa consulta servidores STUN públicos (da Cloudflare e do Google) apenas para descobrir o próprio endereço, e o servidor de salas leva as mensagens de combinação (que contêm endereços de rede) sem guardá-las. Quem não entra na voz não tem o endereço IP mostrado às outras pessoas. O microfone só é liberado para o próprio programa: o YouTube e outros sites dentro dele não podem usá-lo.
 - **Verificação de versão:** ao abrir (e a cada 6 horas) o programa faz um pedido comum a `api.github.com` pelo último release, e baixa o `.zip` de `github.com/mekea-dev/lm-mini-player` se houver versão nova. O GitHub enxerga o seu endereço IP e o nome do programa, como em qualquer download; o programa não envia mais nada. Dá para desligar (`update=0`, veja acima).
 - Se você entrar na sua conta do YouTube ou do Spotify dentro do programa, o login fica no perfil local do programa (veja abaixo), como num navegador. O programa não guarda senhas.
@@ -120,18 +133,18 @@ A janela é um programa nativo em C# (WinForms), sem borda e com a propriedade *
 
 O player oficial do YouTube só aceita de 0,25× a 2×. Para ir de 0,07× a 16× (como o *Video Speed Controller*), o programa injeta um pequeno script, `web/speed-frame.js`, dentro do player; ele mexe direto no `<video>` e só age no player incorporado do YouTube.
 
-A pesquisa do YouTube e o Spotify são **módulos**: cada um abre o site correspondente numa segunda janela do WebView2, criada só quando você usa, que fica por baixo da barra do programa. Na pesquisa, um script (`web/yt-browse.js`) captura o clique num vídeo e manda o link para o seu player em vez de deixar o site tocar. O Spotify é o player web dele (o WebView2 tem a DRM Widevine que ele exige).
+A **lista de resultados** da pesquisa é desenhada pelo próprio programa: uma janela auxiliar do WebView2, **escondida** (nunca aparece), carrega uma página do youtube.com e um script (`web/yt-search.js`) pede os resultados ao YouTube como o navegador faz, lê a lista de vídeos e devolve para a tela (`web/yt.js`). Se o YouTube mudar o formato, só esse arquivo precisa mudar. O **site do YouTube** (botão "Ver no site") e o **Spotify** são **módulos**: cada um abre o site numa janela do WebView2, criada só quando você usa, **por cima** da janela principal e por baixo da barra do programa. No site do YouTube, um script (`web/yt-browse.js`) captura o clique num vídeo e manda o link para o seu player. O Spotify é o player web dele (o WebView2 tem a DRM Widevine que ele exige).
 
 A **atualização automática** (`src/Updater.cs`) lê o último release pela API do GitHub, baixa o `.zip`, confere o SHA-256 que o GitHub informa, descompacta numa pasta de espera e, na hora de instalar, copia os arquivos novos ao lado dos antigos, renomeia os antigos para `.old` (o Windows deixa renomear um programa em execução) e abre a versão nova. Ela precisa dar sinal de vida em 20 s; se não der, é fechada e tudo volta ao que era. Em pasta de desenvolvimento (com `build.ps1` ou `.git` ao lado do `.exe`) a atualização fica desligada, para nunca trocar arquivos por cima do código-fonte.
 
-As **salas** (`web/room.js`, `relay/`) usam um pequeno servidor (um Cloudflare Worker com um Durable Object por sala) e uma conexão WebSocket aberta para cada pessoa: ele guarda só o estado da sala (vídeo, posição, tocando ou pausado, velocidade) e leva as mensagens entre as pessoas, então tudo chega na hora. O relógio de cada computador é medido contra o do servidor para manter o vídeo no mesmo ponto. A **voz** (`web/voice.js`) é WebRTC em malha: cada par de pessoas na voz abre uma conexão direta de áudio (o servidor só leva as mensagens de combinação), e cada pessoa remota toca num `<audio>` próprio, de onde vêm o volume e o silenciar por pessoa. Veja `relay/LEIA-ME.md`.
+As **salas** (`web/room.js`, `relay/`) usam um pequeno servidor (um Cloudflare Worker com um Durable Object por sala) e uma conexão WebSocket aberta para cada pessoa: ele guarda só o estado da sala (vídeo, posição, tocando ou pausado, velocidade) e leva as mensagens entre as pessoas, então tudo chega na hora. A **fila** também fica no servidor (id do vídeo, título e quem adicionou), e o servidor decide o próximo quando o vídeo acaba: todo mundo avisa "acabou" e só o primeiro aviso vale (cada troca de vídeo tem um contador). O relógio de cada computador é medido contra o do servidor para manter o vídeo no mesmo ponto. A **voz** (`web/voice.js`) é WebRTC em malha: cada par de pessoas na voz abre uma conexão direta de áudio (o servidor só leva as mensagens de combinação), e cada pessoa remota toca num `<audio>` próprio, de onde vêm o volume e o silenciar por pessoa. Veja `relay/LEIA-ME.md`.
 
 ```
 lm-mini-player/
 ├─ src/        Program.cs (a janela), Updater.cs (atualização automática), manifesto e ícone
-├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), room.js (salas), voice.js (voz), speed-frame.js (velocidade e salas dentro do player) e yt-browse.js (cliques da pesquisa)
+├─ web/        a interface: index.html, app.css, app.js, link.js (leitor de links), room.js (salas e fila), voice.js (voz), yt.js e yt-search.js (a lista de resultados da pesquisa), speed-frame.js (velocidade e salas dentro do player) e yt-browse.js (cliques no site do YouTube)
 ├─ relay/      o servidor de salas (worker.js, wrangler.jsonc) e o guia para montá-lo
-├─ tests/      links.html (leitor de links) e room-test.html (servidor de salas)
+├─ tests/      links.html (leitor de links), room-test.html (servidor de salas e fila) e yt-test.html (leitura dos resultados da pesquisa, com uma amostra real em yt-fixture.json)
 ├─ docs/       imagens deste README
 ├─ build.ps1   compila (e empacota com -Package)
 ├─ CHANGELOG.md  o que mudou em cada versão (vira as notas do release)
@@ -149,11 +162,11 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -Package   # e também o .z
 
 **Publicar uma versão nova:** atualize `$version` em `build.ps1` e `AssemblyVersion` e `AssemblyFileVersion` em `src/Program.cs` (os três têm de bater com a tag: a atualização automática recusa um pacote cuja versão interna não é a anunciada, e o workflow confere isso antes de compilar), acrescente a seção da versão no `CHANGELOG.md`, faça o commit e envie uma tag (`git tag -a v1.4.0 -m "..." && git push origin v1.4.0`). O workflow `.github/workflows/release.yml` compila no GitHub e publica o `.zip` na aba *Releases*, com o histórico da versão e o SHA-256 nas notas.
 
-**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** com o mesmo servidor, abra <http://localhost:8000/tests/room-test.html> (mostra "OK 69/69" no título; roda o código real do servidor com um ambiente de mentira, sem rede). Detalhes no fim de `relay/LEIA-ME.md`.
+**Testes do leitor de links:** na pasta do projeto, rode `python -m http.server 8000` e abra <http://localhost:8000/tests/links.html> (mostra "OK 43/43" no título). **Testes do servidor de salas:** com o mesmo servidor, abra <http://localhost:8000/tests/room-test.html> (mostra "OK 98/98" no título; roda o código real do servidor com um ambiente de mentira, sem rede). **Testes da pesquisa do YouTube:** <http://localhost:8000/tests/yt-test.html> ("OK 40/40"). Detalhes no fim de `relay/LEIA-ME.md`.
 
 ## Créditos e avisos
 
 - Este projeto **não é afiliado, patrocinado nem endossado** pelo YouTube ou pelo Google. YouTube é marca registrada do Google LLC. Ao assistir vídeos, valem os [Termos de Serviço do YouTube](https://www.youtube.com/t/terms).
 - *WebView2* © Microsoft. A licença acompanha o `.zip` na pasta `THIRD-PARTY`.
-- Os quadros de vídeo das imagens deste README são de *Big Buck Bunny* © 2008 Blender Foundation, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) · [bigbuckbunny.org](https://peach.blender.org/).
+- Os quadros de vídeo das imagens deste README são de *Big Buck Bunny* © 2008 Blender Foundation, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) · [bigbuckbunny.org](https://peach.blender.org/). A imagem da fila também mostra miniaturas dos filmes abertos *Sintel* e *Tears of Steel* (© Blender Foundation, CC BY 3.0), *Elephants Dream* (© Blender Foundation, [CC BY 2.5](https://creativecommons.org/licenses/by/2.5/)) e *Spring* (© Blender Animation Studio, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
 - Licença do código: [MIT](LICENSE).

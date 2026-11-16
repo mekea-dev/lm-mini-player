@@ -227,6 +227,10 @@
     if (!room.on || isAd()) return;
     var v = video();
     if (!v) return;
+    // O que a pessoa acabou de fazer passa a ser a verdade dela para a correcao de atraso. O servidor so devolve o
+    // eco para os OUTROS; sem isto o estado guardado aqui ficava velho (posicao ou velocidade de antes) e, 2 s depois,
+    // a correcao puxava o proprio video de volta, deixando quem pulou ou mudou a velocidade fora da sala.
+    room.state = { pos: v.currentTime, at: Date.now() + room.offset, playing: !v.paused, rate: v.playbackRate || 1 };
     try { window.parent.postMessage({ lmmp: 1, type: 'rev', ev: ev, pos: v.currentTime, rate: v.playbackRate }, '*'); } catch (e) { /* ignora */ }
   }
 

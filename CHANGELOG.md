@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## v1.5.0 - 2026-11-16
+
+- **Fila de vídeos compartilhada na sala.** No painel da sala, a aba **Fila** guarda os vídeos que vêm a seguir (até 50), e a lista é a mesma para todo mundo. Qualquer pessoa adiciona colando um link ou com o **+** dos resultados da pesquisa (aparece o aviso "Ana adicionou à fila: …"). **Arraste pelo cabo ⋮⋮ com o mouse** para mudar a ordem (ou use ↑ ↓ no teclado), toque um item na hora com o **▶** ou tire da fila com o **✕**. **Quando o vídeo acaba, a sala passa sozinha para o próximo da fila**, para todos (se vários computadores avisam o fim ao mesmo tempo, só o primeiro conta). Com a sala parada (sem vídeo, ou o último acabou e não havia próximo), o que for adicionado já começa a tocar. Ctrl+V com a aba aberta também põe o link na fila.
+- **Pesquisa do YouTube com lista de resultados, como no YouTube.** Ao pesquisar (Ctrl+L, digitar, Enter) aparece uma lista no próprio programa, com miniatura, duração, título, canal, visualizações e data; rolar até o fim carrega mais resultados; clicar no vídeo toca no player e o **+** põe na fila. A lista é feita para janelas pequenas e não traz os anúncios do site. O **site do YouTube** continua disponível ("Ver no site do YouTube", a casinha da barra e o botão Explorar YouTube).
+- **Correção importante nas salas:** quem **pulava** o vídeo (arrastando a barra) ou **mudava a velocidade** saía de sincronia. A correção de atraso puxava o vídeo dessa pessoa de volta para a posição de antes enquanto a sala e todos os outros já estavam na nova. Agora o que você faz passa a valer na hora também para a sua própria janela.
+- O servidor das salas (Cloudflare) já está atualizado com a fila; programas 1.3.x e 1.4.x continuam entrando nas salas, só sem a fila.
+
 ## v1.4.1 - 2026-11-16
 
 - **A pesquisa do YouTube e o Spotify voltam a aparecer.** Nas versões 1.2.0 a 1.4.0 a janela dos sites (resultados do YouTube, Spotify) abria por baixo da janela principal do programa, que é opaca: o que aparecia era só o fundo escuro com "Abrindo…", como se nada carregasse. Agora a janela do site sempre fica por cima, e só a barra de cima e as bordas de redimensionar continuam sendo do programa.

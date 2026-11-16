@@ -90,6 +90,12 @@
     <symbol id="i-volume-x" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></g>
     </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -164,6 +170,17 @@
 </header>
 <div id="modLoading">Abrindo…</div>
 
+<!-- Resultados da pesquisa do YouTube (lista do programa, com + para a fila da sala) -->
+<section id="results" class="results" aria-label="Resultados da pesquisa">
+  <ul id="resList" class="res-list"></ul>
+  <p id="resMsg" class="res-msg" role="status"></p>
+  <div id="resActions" class="res-actions" hidden>
+    <button type="button" class="btn sm" id="resRetry"><svg class="i"><use href="#i-retry"/></svg><span>Tentar de novo</span></button>
+    <button type="button" class="btn ghost sm" id="resSite"><svg class="i"><use href="#i-ext"/></svg><span>Ver no site do YouTube</span></button>
+  </div>
+  <button type="button" class="res-site" id="resSite2" hidden>Ver esta pesquisa no site do YouTube</button>
+</section>
+
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- Alcas invisiveis para redimensionar a janela por qualquer borda ou canto -->
@@ -191,22 +208,38 @@
       </form>
     </div>
     <div id="rpIn" hidden>
-      <div class="rp-top">
-        <div class="rp-code" id="rpCodeShow" title="Código da sala">--------</div>
-        <button type="button" class="btn sm" id="rpCopy" title="Copiar o código"><svg class="i"><use href="#i-copy"/></svg><span>Copiar</span></button>
+      <div class="rp-tabs" role="tablist">
+        <button type="button" class="rp-tab on" id="rpTabRoom" role="tab" aria-selected="true">Sala</button>
+        <button type="button" class="rp-tab" id="rpTabQueue" role="tab" aria-selected="false">Fila <span class="rp-badge" id="rpQCount" hidden>0</span></button>
       </div>
-      <p class="rp-txt" id="rpInfo">1 pessoa na sala</p>
-      <ul class="rp-members" id="rpMembers"></ul>
-      <div class="rp-voice">
-        <button type="button" class="btn" id="rpMic"><svg class="i"><use href="#i-mic"/></svg><span id="rpMicText">Entrar na voz</span></button>
-        <button type="button" class="btn ghost" id="rpVoiceOff" hidden>Sair da voz</button>
+      <div id="rpPaneRoom">
+        <div class="rp-top">
+          <div class="rp-code" id="rpCodeShow" title="Código da sala">--------</div>
+          <button type="button" class="btn sm" id="rpCopy" title="Copiar o código"><svg class="i"><use href="#i-copy"/></svg><span>Copiar</span></button>
+        </div>
+        <p class="rp-txt" id="rpInfo">1 pessoa na sala</p>
+        <ul class="rp-members" id="rpMembers"></ul>
+        <div class="rp-voice">
+          <button type="button" class="btn" id="rpMic"><svg class="i"><use href="#i-mic"/></svg><span id="rpMicText">Entrar na voz</span></button>
+          <button type="button" class="btn ghost" id="rpVoiceOff" hidden>Sair da voz</button>
+        </div>
+        <div class="rp-vols">
+          <label class="rp-vol"><span>Vídeo</span><input type="range" id="rpVidVol" min="0" max="100" step="1" aria-label="Volume do vídeo"></label>
+          <label class="rp-vol"><span>Vozes</span><input type="range" id="rpVoiceVol" min="0" max="100" step="1" aria-label="Volume das vozes"></label>
+        </div>
+        <label class="rp-me"><span>Seu nome</span><input id="rpName2" type="text" maxlength="24" spellcheck="false" autocomplete="off" aria-label="Seu nome na sala"></label>
+        <div class="rp-row"><button type="button" class="btn ghost" id="rpLeave">Sair da sala</button></div>
       </div>
-      <div class="rp-vols">
-        <label class="rp-vol"><span>Vídeo</span><input type="range" id="rpVidVol" min="0" max="100" step="1" aria-label="Volume do vídeo"></label>
-        <label class="rp-vol"><span>Vozes</span><input type="range" id="rpVoiceVol" min="0" max="100" step="1" aria-label="Volume das vozes"></label>
+      <div id="rpPaneQueue" hidden>
+        <form id="rpQForm" class="rp-qadd" autocomplete="off">
+          <input id="rpQInput" type="text" spellcheck="false" autocapitalize="off" placeholder="Colar um link para a fila" aria-label="Link do vídeo para adicionar à fila">
+          <button type="submit" class="btn sm" id="rpQAdd"><svg class="i"><use href="#i-plus"/></svg><span>Adicionar</span></button>
+        </form>
+        <ul class="rp-queue" id="rpQList"></ul>
+        <p class="rp-txt rp-qempty" id="rpQEmpty">A fila está vazia. Cole um link acima ou use o <b>+</b> nos resultados da pesquisa.</p>
+        <p class="rp-qhint" id="rpQHint">Arraste <svg class="i"><use href="#i-grip"/></svg> para mudar a ordem. Quando o vídeo acaba, toca o próximo.</p>
+        <div class="rp-row"><button type="button" class="btn ghost sm" id="rpQClear">Limpar a fila</button></div>
       </div>
-      <label class="rp-me"><span>Seu nome</span><input id="rpName2" type="text" maxlength="24" spellcheck="false" autocomplete="off" aria-label="Seu nome na sala"></label>
-      <div class="rp-row"><button type="button" class="btn ghost" id="rpLeave">Sair da sala</button></div>
     </div>
     <p class="rp-msg" id="rpMsg" role="status"></p>
   </div>
@@ -224,6 +257,7 @@
 <script src="link.js"></script>
 <script src="room.js"></script>
 <script src="voice.js"></script>
+<script src="yt.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

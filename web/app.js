@@ -5,10 +5,12 @@
  * Conversa com o programa (C#) por mensagens de texto "comando:argumento":
  *   pagina -> programa:  ready | drag | size:<borda> | min | close | pin:0/1 | op:0.85
  *                        paste | typing:0/1 | open:<url>
- *                        mod:<player|youtube|spotify> | search:<texto> | modhome
+ *                        mod:<player|youtube|spotify> | search:<texto> | modhome | modhide | yhome | yprep
+ *                        ysearch:<n>:<texto> | ymore:<n>:<token> | yinfo:<n>:<id>   (veja yt.js)
  *                        update:<link do video atual> | updweb
  *   programa -> pagina:  cfg:pin=1;op=1 | url:<texto> | link | ui:0/1 | dragend
  *                        mod:<modulo> | modtitle:<texto> | modfail:<modulo>
+ *                        yres:<n>:<json> | yinfo:<n>:<json>   (veja yt.js)
  *                        upd:ready:<versao> | upd:manual:<versao> | upd:busy | upd:fail
  */
 (function () {
@@ -43,6 +45,15 @@
     opacity: 1,
     rate: 1,            // velocidade do video (vem do player por mensagem)
     mode: 'player',     // 'player' | 'youtube' (busca) | 'spotify'
+    ytView: 'results',  // no modo youtube: 'results' (lista do programa) | 'site' (o site do YouTube, janela do programa)
+    ytq: '',            // o que foi pesquisado
+    ytItems: [],        // videos achados
+    ytMore: null,       // proxima pagina (token) ou null
+    ytBusy: false,
+    ytErr: '',
+    ytGen: 0,           // descarta resposta de pesquisa antiga
+    rpTab: 'room',      // aba do painel da sala: 'room' | 'queue'
+    qDrag: null,        // arraste da fila em andamento
     toastTimer: 0,
     muteOnReady: false  // so para testes automaticos (abre o video mudo)
   };
@@ -56,13 +67,14 @@
 
   function onHostMessage(text) {
     if (typeof text !== 'string') return;
+    if (window.LMYt && window.LMYt.onHost(text)) return;            // resposta da pesquisa do YouTube
     var i = text.indexOf(':');
     var cmd = i < 0 ? text : text.slice(0, i);
     var arg = i < 0 ? '' : text.slice(i + 1);
     if (cmd === 'cfg') {
       applyCfg(arg);
     } else if (cmd === 'url') {
-      handleText(arg);
+      if (queueTabOpen()) addLinkToQueue(arg); else handleText(arg);   // com a aba Fila aberta, colar um link poe na fila
     } else if (cmd === 'link') {
       openOmnibox();
     } else if (cmd === 'mod') {
@@ -362,6 +374,11 @@
         n + (n === 1 ? ' pessoa na sala' : ' pessoas na sala');
       renderMembers(list);
       syncVolumes();
+      renderRoomTab();
+      renderQueue();
+    } else {
+      S.rpTab = 'room';
+      S.qSig = '';
     }
     renderVoice();
     sendToFrameRaw({ type: 'roomOn', on: on });
@@ -457,6 +474,241 @@
     };
   }
 
+  /* ---------- fila de videos da sala ---------- */
+
+  function queueTabOpen() { return !$('roomPanel').hidden && S.rpTab === 'queue' && !!Room.code(); }
+
+  function renderRoomTab() {
+    var q = S.rpTab === 'queue';
+    $('roomPanel').classList.toggle('q-on', q);
+    $('rpPaneRoom').hidden = q;
+    $('rpPaneQueue').hidden = !q;
+    $('rpTabRoom').classList.toggle('on', !q);
+    $('rpTabRoom').setAttribute('aria-selected', q ? 'false' : 'true');
+    $('rpTabQueue').classList.toggle('on', q);
+    $('rpTabQueue').setAttribute('aria-selected', q ? 'true' : 'false');
+  }
+
+  function setRoomTab(t) {
+    S.rpTab = t === 'queue' ? 'queue' : 'room';
+    roomMsg('');
+    renderRoomTab();
+    if (S.rpTab === 'queue') {
+      renderQueue(true);
+      if (ytAvailable()) toHost('yprep');                              // aquece a janela que acha o titulo dos links colados
+      setTimeout(function () { if (queueTabOpen() && !S.qDrag) $('rpQInput').focus(); }, 30);
+    }
+    else renderRoom();
+  }
+
+  function qTitle(it) { return it.title || ('youtu.be/' + it.vid); }
+
+  function qRow(it) {
+    var li = el('li', 'qi');
+    li.setAttribute('data-qid', it.id);
+    var grip = el('button', 'qgrip');
+    grip.type = 'button';
+    grip.title = 'Arraste para mudar a ordem (ou use as setas ↑ ↓)';
+    grip.setAttribute('aria-label', 'Mudar a ordem: ' + qTitle(it));
+    grip.appendChild(icon('i-grip'));
+    li.appendChild(grip);
+    var img = document.createElement('img');
+    img.className = 'qth';
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.draggable = false;
+    img.src = 'https://i.ytimg.com/vi/' + it.vid + '/mqdefault.jpg';
+    li.appendChild(img);
+    var tx = el('span', 'qtx');
+    tx.appendChild(el('span', 'qtt', qTitle(it)));
+    if (it.by) tx.appendChild(el('span', 'qby', 'por ' + it.by));
+    li.appendChild(tx);
+    var pl = el('button', 'ib qplay');
+    pl.type = 'button';
+    pl.title = 'Tocar agora (para todos na sala)';
+    pl.setAttribute('aria-label', 'Tocar agora: ' + qTitle(it));
+    pl.appendChild(icon('i-play'));
+    li.appendChild(pl);
+    var rm = el('button', 'ib qrm');
+    rm.type = 'button';
+    rm.title = 'Tirar da fila';
+    rm.setAttribute('aria-label', 'Tirar da fila: ' + qTitle(it));
+    rm.appendChild(icon('i-x'));
+    li.appendChild(rm);
+    return li;
+  }
+
+  // desenha a fila (titulos vem de outras pessoas: sempre como texto, nunca como HTML)
+  function renderQueue(force) {
+    if (S.qDrag) { S.qDirty = true; return; }
+    var q = Room.queue();
+    var n = q.length;
+    var sig = JSON.stringify(q);
+    var b = $('rpQCount');
+    b.hidden = !n;
+    b.textContent = String(n);
+    if (!force && sig === S.qSig) return;
+    S.qSig = sig;
+    var ul = $('rpQList');
+    var focusId = S.qFocus;
+    S.qFocus = null;
+    while (ul.firstChild) ul.removeChild(ul.firstChild);
+    q.forEach(function (it) { ul.appendChild(qRow(it)); });
+    $('rpQEmpty').hidden = n > 0;
+    $('rpQHint').hidden = n < 2;
+    $('rpQClear').parentNode.hidden = n === 0;
+    if (focusId) {
+      var rows = ul.children;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].getAttribute('data-qid') === focusId) { var g = rows[i].querySelector('.qgrip'); if (g) g.focus(); break; }
+      }
+    }
+  }
+
+  // colar/escrever um link de video: titulo pelo YouTube (ate 2,5 s) e vai para o fim da fila
+  function addLinkToQueue(text) {
+    var info = window.LMLink.parse(text);
+    if (!info) { roomMsg('Isso não parece um link de vídeo do YouTube.'); return false; }
+    if (!info.id) { roomMsg('A fila aceita vídeos, não listas. Cole o link de um vídeo.'); return false; }
+    roomMsg('');
+    var done = false;
+    function go(title) {
+      if (done) return;
+      done = true;
+      if (!Room.qAdd(info.id, title || '')) roomMsg('A sala está reconectando… tente de novo.');
+    }
+    var timer = setTimeout(function () { go(''); }, 2500);
+    if (ytAvailable()) {
+      window.LMYt.info(info.id).then(function (r) { clearTimeout(timer); go(r.title); }, function () { clearTimeout(timer); go(''); });
+    } else { clearTimeout(timer); go(''); }
+    return true;
+  }
+
+  Room.hooks.queue = function (ev) {
+    renderQueue();
+    if (!ev) return;
+    var mine = ev.by === Room.myId();
+    var t = ev.title || 'um vídeo';
+    if (ev.k === 'add') toast(mine ? 'Adicionado à fila' : (ev.n || 'Alguém') + ' adicionou à fila: ' + t);
+    else if (ev.k === 'play' && !mine) toast((ev.n || 'Alguém') + ' tocou: ' + t);
+    else if (ev.k === 'next') toast('Próximo da fila: ' + t);
+  };
+
+  $('rpTabRoom').addEventListener('click', function () { setRoomTab('room'); });
+  $('rpTabQueue').addEventListener('click', function () { setRoomTab('queue'); });
+  $('rpQForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = $('rpQInput').value;
+    if (!v.trim()) return;
+    if (addLinkToQueue(v)) $('rpQInput').value = '';
+  });
+  $('rpQInput').addEventListener('paste', function () {              // colou um link: entra na fila na hora (como no campo da tela de link)
+    setTimeout(function () { var v = $('rpQInput').value; if (v.trim() && window.LMLink.parse(v) && addLinkToQueue(v)) $('rpQInput').value = ''; }, 0);
+  });
+  $('rpQClear').addEventListener('click', function () { Room.qClear(); });
+  $('rpQList').addEventListener('click', function (e) {
+    var li = e.target.closest ? e.target.closest('.qi') : null;
+    if (!li) return;
+    var id = li.getAttribute('data-qid');
+    if (e.target.closest('.qplay')) Room.qPlay(id);
+    else if (e.target.closest('.qrm')) Room.qRemove(id);
+  });
+  $('rpQList').addEventListener('keydown', function (e) {             // alternativa ao mouse: seta para cima/baixo no cabo da linha
+    var g = e.target.closest ? e.target.closest('.qgrip') : null;
+    if (!g || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    var id = g.closest('.qi').getAttribute('data-qid');
+    var q = Room.queue();
+    var i = -1;
+    for (var k = 0; k < q.length; k++) if (q[k].id === id) i = k;
+    var to = i + (e.key === 'ArrowUp' ? -1 : 1);
+    if (i < 0 || to < 0 || to >= q.length) return;
+    e.preventDefault();
+    S.qFocus = id;
+    Room.qMove(id, to);
+  });
+
+  // arrastar para reordenar (mouse ou toque): a linha acompanha o ponteiro, as outras abrem espaco, e ao soltar o servidor confirma
+  var qd = null;
+
+  function qDragMove() {
+    var ul = qd.ul, li = qd.li;
+    var rect = ul.getBoundingClientRect();
+    var top = (qd.y - rect.top + ul.scrollTop) - qd.grab;
+    li.style.transform = 'translateY(' + (top - li.offsetTop) + 'px)';
+    var center = top + li.offsetHeight / 2;
+    var to = 0;
+    qd.rows.forEach(function (r) { if (r !== li && r.offsetTop + r.offsetHeight / 2 < center) to++; });
+    qd.to = to;
+    qd.rows.forEach(function (r, idx) {
+      if (r === li) return;
+      var shift = 0;
+      if (qd.from < to && idx > qd.from && idx <= to) shift = -qd.step;
+      else if (qd.from > to && idx >= to && idx < qd.from) shift = qd.step;
+      r.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+    });
+  }
+
+  function qEdgeScroll() {                                            // perto da borda de cima/baixo a lista rola sozinha
+    clearInterval(qd.timer);
+    var rect = qd.ul.getBoundingClientRect();
+    var dir = qd.y < rect.top + 26 ? -1 : (qd.y > rect.bottom - 26 ? 1 : 0);
+    if (!dir) return;
+    qd.timer = setInterval(function () {
+      if (!qd) return;
+      var before = qd.ul.scrollTop;
+      qd.ul.scrollTop += dir * 8;
+      if (qd.ul.scrollTop !== before) qDragMove();
+    }, 30);
+  }
+
+  function qDragEnd(e, cancel) {
+    if (!qd || (e && e.pointerId !== qd.pid)) return;
+    clearInterval(qd.timer);
+    var d = qd;
+    qd = null;
+    S.qDrag = null;
+    d.li.classList.remove('dragging');
+    d.ul.classList.remove('sorting');
+    d.rows.forEach(function (r) { r.style.transform = ''; });
+    if (!cancel && d.to !== d.from) {
+      var after = d.rows.filter(function (r) { return r !== d.li; })[d.to];
+      d.ul.insertBefore(d.li, after || null);                         // ja mostra a ordem nova (o servidor confirma logo em seguida)
+      Room.qMove(d.id, d.to);
+    }
+    if (S.qDirty) { S.qDirty = false; renderQueue(true); }
+  }
+
+  $('rpQList').addEventListener('pointerdown', function (e) {
+    var grip = e.target.closest ? e.target.closest('.qgrip') : null;
+    if (!grip || e.button !== 0) return;
+    var ul = $('rpQList');
+    var li = grip.closest('.qi');
+    var rows = [].slice.call(ul.children);
+    var from = rows.indexOf(li);
+    if (from < 0 || rows.length < 2) return;
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
+    var rect = ul.getBoundingClientRect();
+    qd = {
+      li: li, ul: ul, rows: rows, id: li.getAttribute('data-qid'), from: from, to: from, pid: e.pointerId, y: e.clientY, timer: 0,
+      grab: (e.clientY - rect.top + ul.scrollTop) - li.offsetTop,
+      step: rows[1].offsetTop - rows[0].offsetTop                      // altura de uma linha + o espaco entre elas
+    };
+    S.qDrag = qd;
+    li.classList.add('dragging');
+    ul.classList.add('sorting');
+  });
+  $('rpQList').addEventListener('pointermove', function (e) {
+    if (!qd || e.pointerId !== qd.pid) return;
+    qd.y = e.clientY;
+    qDragMove();
+    qEdgeScroll();
+  });
+  $('rpQList').addEventListener('pointerup', function (e) { qDragEnd(e, false); });
+  $('rpQList').addEventListener('pointercancel', function (e) { qDragEnd(e, true); });
+  $('rpQList').addEventListener('lostpointercapture', function (e) { qDragEnd(e, true); });
+
   $('roomHome').addEventListener('click', openRoomPanel);
   $('rpClose').addEventListener('click', closeRoomPanel);
   $('rpCreate').addEventListener('click', function () {
@@ -480,7 +732,7 @@
   });
   $('rpLeave').addEventListener('click', function () { Room.leave(); renderRoom(); roomMsg('Você saiu da sala.'); });
   $('rpCopy').addEventListener('click', function () { copyText(Room.code()); });
-  ['rpCode', 'rpName', 'rpName2'].forEach(function (id) {
+  ['rpCode', 'rpName', 'rpName2', 'rpQInput'].forEach(function (id) {
     $(id).addEventListener('focus', function () { S.typing = true; toHost('typing:1'); refreshUi(); });
     $(id).addEventListener('blur', function () { S.typing = false; toHost('typing:0'); refreshUi(); });
   });
@@ -566,6 +818,7 @@
     body.classList.toggle('browse', name !== 'player');
     body.classList.toggle('mod-youtube', name === 'youtube');
     body.classList.toggle('mod-spotify', name === 'spotify');
+    body.classList.toggle('yt-results', name === 'youtube' && S.ytView === 'results');
     $('tabYoutube').classList.toggle('on', name === 'youtube');
     $('tabSpotify').classList.toggle('on', name === 'spotify');
     if (name !== 'player') { body.classList.remove('home'); clearError(); }
@@ -575,8 +828,136 @@
 
   function openModule(name) {
     if (S.mode === name) return;
+    if (name === 'youtube') {
+      if (S.ytq && window.LMYt && window.LMYt.available()) { showYtResults(); return; }    // volta a lista da ultima pesquisa
+      S.ytView = 'site';                                                                // sem pesquisa: o site do YouTube
+    }
     setMode(name);
     toHost('mod:' + name);
+  }
+
+  // ---------- resultados da pesquisa do YouTube (lista do programa) ----------
+
+  function ytAvailable() { return !!(window.LMYt && window.LMYt.available()); }
+
+  function showYtResults() {
+    S.ytView = 'results';
+    setMode('youtube');
+    toHost('modhide');                                    // esconde a janela dos sites (se estava aberta)
+    renderResults();
+  }
+
+  function searchYoutube(q) {
+    if (!ytAvailable()) { S.ytView = 'site'; setMode('youtube'); toHost('search:' + q); return; }   // sem o programa: o site mesmo
+    S.ytq = q;
+    S.ytItems = [];
+    S.ytMore = null;
+    S.ytErr = '';
+    S.ytBusy = false;
+    S.ytGen++;
+    var ul = $('resList');
+    while (ul.firstChild) ul.removeChild(ul.firstChild);
+    $('results').scrollTop = 0;
+    showYtResults();
+    loadResults(false);
+  }
+
+  function ytErrorText(err) {
+    var m = err && err.message;
+    if (m === 'tempo' || m === 'rede') return 'Sem resposta do YouTube. Confira a internet e tente de novo.';
+    if (m === 'formato') return 'O YouTube mudou o formato da pesquisa e não consegui ler os resultados.';
+    return 'Não consegui pesquisar agora.';
+  }
+
+  function loadResults(more) {
+    if (S.ytBusy || (more && !S.ytMore)) return;
+    var gen = S.ytGen;
+    S.ytBusy = true;
+    S.ytErr = '';
+    renderResults();
+    (more ? window.LMYt.more(S.ytMore) : window.LMYt.search(S.ytq)).then(function (r) {
+      if (gen !== S.ytGen) return;
+      S.ytBusy = false;
+      var seen = {};
+      S.ytItems.forEach(function (i) { seen[i.id] = 1; });
+      (r.items || []).forEach(function (i) { if (!seen[i.id]) S.ytItems.push(i); });
+      S.ytMore = r.more || null;
+      renderResults();
+      setTimeout(fillResults, 0);
+    }, function (err) {
+      if (gen !== S.ytGen) return;
+      S.ytBusy = false;
+      S.ytErr = ytErrorText(err);
+      renderResults();
+    });
+  }
+
+  // a lista ainda nao enche a janela (janela alta) e ha mais: busca a proxima pagina
+  function fillResults() {
+    var r = $('results');
+    if (S.mode !== 'youtube' || S.ytView !== 'results' || S.ytBusy || !S.ytMore) return;
+    if (r.scrollHeight <= r.clientHeight + 40) loadResults(true);
+  }
+
+  function resRow(it) {
+    var li = el('li', 'res');
+    li.setAttribute('data-vid', it.id);
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+    li.title = it.title;
+    var th = el('span', 'rth');
+    var img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = 'https://i.ytimg.com/vi/' + it.id + '/mqdefault.jpg';
+    th.appendChild(img);
+    if (it.live) th.appendChild(el('span', 'rdur live', 'AO VIVO'));
+    else if (it.dur) th.appendChild(el('span', 'rdur', it.dur));
+    li.appendChild(th);
+    var tx = el('span', 'rtx');
+    tx.appendChild(el('span', 'rtt', it.title));
+    if (it.channel) tx.appendChild(el('span', 'rch', it.channel));
+    var meta = [it.views, it.pub].filter(Boolean).join(' · ');
+    if (meta) tx.appendChild(el('span', 'rmeta', meta));
+    li.appendChild(tx);
+    var q = el('button', 'ib rq');
+    q.type = 'button';
+    q.title = 'Adicionar à fila da sala';
+    q.setAttribute('aria-label', 'Adicionar à fila da sala: ' + it.title);
+    q.appendChild(icon('i-plus'));
+    li.appendChild(q);
+    return li;
+  }
+
+  function renderResults() {
+    var ul = $('resList');
+    if (ul.children.length > S.ytItems.length) { while (ul.firstChild) ul.removeChild(ul.firstChild); }
+    for (var i = ul.children.length; i < S.ytItems.length; i++) ul.appendChild(resRow(S.ytItems[i]));     // so acrescenta: nao perde a rolagem
+    var text = '';
+    if (S.ytBusy) text = S.ytItems.length ? 'Carregando mais…' : 'Pesquisando…';
+    else if (S.ytErr) text = S.ytErr;
+    else if (!S.ytItems.length && S.ytq) text = 'Nada encontrado para “' + S.ytq + '”.';
+    $('resMsg').textContent = text;
+    $('resActions').hidden = !(S.ytErr && !S.ytBusy);
+    $('resSite2').hidden = !(S.ytItems.length && !S.ytBusy && !S.ytErr);
+  }
+
+  function resItem(id) {
+    for (var i = 0; i < S.ytItems.length; i++) if (S.ytItems[i].id === id) return S.ytItems[i];
+    return null;
+  }
+
+  function playResult(it) {
+    var info = window.LMLink.parse('https://www.youtube.com/watch?v=' + it.id);
+    if (info) play(info);
+  }
+
+  function queueResult(it, li) {
+    if (!Room.code()) { toast('A fila é da sala: crie ou entre numa sala para usar'); return; }
+    if (Room.status() !== 'ok') { toast('A sala está reconectando… tente de novo'); return; }
+    Room.qAdd(it.id, it.title);
+    if (li) { li.classList.add('queued'); setTimeout(function () { li.classList.remove('queued'); }, 1400); }
   }
 
   function backToPlayer() {
@@ -600,8 +981,7 @@
     text = (text || '').trim();
     if (!text) { toast('Digite um link ou o que quer pesquisar'); return false; }
     $('searchInput').value = text;
-    setMode('youtube');
-    toHost('search:' + text);
+    searchYoutube(text);
     return true;
   }
 
@@ -703,8 +1083,15 @@
   }
 
   function onPlayerState(e) {
-    // 1 = tocando, 3 = carregando, 5 = pronto
+    // 0 = acabou, 1 = tocando, 3 = carregando, 5 = pronto
+    if (e && e.data === 0) onVideoEnded();
     if (e && (e.data === 1 || e.data === 3 || e.data === 5)) updateTitleFromPlayer();
+  }
+
+  // o video acabou: numa sala passa para o proximo da fila (varias pessoas pedem ao mesmo tempo, so a primeira vale)
+  function onVideoEnded() {
+    if (!Room.code() || !S.current || S.current.list) return;       // lista do YouTube passa sozinha de um video para o outro
+    Room.qNext();
   }
 
   function updateTitleFromPlayer() {
@@ -827,7 +1214,40 @@
   $('mBack').addEventListener('click', backToPlayer);
   $('tabYoutube').addEventListener('click', function () { openModule('youtube'); });
   $('tabSpotify').addEventListener('click', function () { openModule('spotify'); });
-  $('mHome').addEventListener('click', function () { toHost('modhome'); });
+  $('mHome').addEventListener('click', function () {
+    if (S.mode === 'youtube') { S.ytView = 'site'; setMode('youtube'); toHost('yhome'); }       // pagina inicial do YouTube (o site)
+    else toHost('modhome');
+  });
+
+  // resultados da pesquisa (lista do programa)
+  $('resList').addEventListener('click', function (e) {
+    var li = e.target.closest ? e.target.closest('.res') : null;
+    if (!li) return;
+    var it = resItem(li.getAttribute('data-vid'));
+    if (!it) return;
+    if (e.target.closest('.rq')) queueResult(it, li); else playResult(it);
+  });
+  $('resList').addEventListener('keydown', function (e) {
+    var li = e.target.closest ? e.target.closest('.res') : null;
+    if (!li) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      if (e.target.closest('.rq')) return;                            // o botao + trata o proprio Enter
+      e.preventDefault();
+      var it = resItem(li.getAttribute('data-vid'));
+      if (it) playResult(it);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      var nx = e.key === 'ArrowDown' ? li.nextElementSibling : li.previousElementSibling;
+      if (nx) { e.preventDefault(); nx.focus(); }
+    }
+  });
+  $('results').addEventListener('scroll', function () {
+    var r = $('results');
+    if (S.ytMore && !S.ytBusy && r.scrollTop + r.clientHeight >= r.scrollHeight - 160) loadResults(true);
+  });
+  $('resRetry').addEventListener('click', function () { loadResults(S.ytItems.length > 0); });
+  function openYtSite() { S.ytView = 'site'; setMode('youtube'); toHost('search:' + S.ytq); }
+  $('resSite').addEventListener('click', openYtSite);
+  $('resSite2').addEventListener('click', openYtSite);
   $('mMin').addEventListener('click', function () { toHost('min'); });
   $('mClose').addEventListener('click', function () { toHost('close'); });
   $('mPin').addEventListener('click', function () { $('bPin').click(); });
@@ -861,9 +1281,11 @@
     }
   });
   document.addEventListener('paste', function (e) {
-    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput' || e.target.id === 'rpCode' || e.target.id === 'rpName' || e.target.id === 'rpName2')) return;   // os campos cuidam do proprio colar
+    if (e.target && (e.target.id === 'url' || e.target.id === 'searchInput' || e.target.id === 'rpCode' || e.target.id === 'rpName' || e.target.id === 'rpName2' || e.target.id === 'rpQInput')) return;   // os campos cuidam do proprio colar
     var t = e.clipboardData ? e.clipboardData.getData('text') : '';
-    if (t) { e.preventDefault(); handleText(t); }
+    if (!t) return;
+    e.preventDefault();
+    if (queueTabOpen()) addLinkToQueue(t); else handleText(t);       // com a aba Fila aberta, colar um link poe na fila
   });
 
   // o script que vive dentro do player do YouTube (speed-frame.js) informa a velocidade atual

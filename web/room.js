@@ -16,7 +16,10 @@
  *   LMRoom.publishLoad(info)  avisa a sala que a pessoa trocou de video
  *   LMRoom.onFrameEvent(ev)   avisa a sala de play/pause/pulo/velocidade (vindo do player)
  *   LMRoom.send(obj)          manda uma mensagem solta para o servidor (voz); LMRoom.setVoice(on, mudo)
- *   LMRoom.hooks              { changed, toast, applyRemote, signal, memberJoined, memberLeft, memberUpdated, opened, left }
+ *   LMRoom.queue()            a fila de videos da sala: [{ id, vid, title, by }]
+ *   LMRoom.qAdd(vid, titulo, posicao?) / qMove(id, para) / qRemove(id) / qPlay(id) / qClear()
+ *   LMRoom.qNext()            o video acabou: pede o proximo da fila (so a primeira pessoa a pedir vale)
+ *   LMRoom.hooks              { changed, toast, applyRemote, signal, memberJoined, memberLeft, memberUpdated, opened, left, queue }
  */
 (function () {
   'use strict';
@@ -40,6 +43,7 @@
     v: -1,                         // versao do estado que ja conhecemos
     state: null,                   // { vid, list, pos, playing, rate, at, by }
     members: [],                   // [{ id, name, voice, muted }]
+    q: [],                         // fila de videos: [{ id, vid, title, by }]
     offset: 0,                     // hora do servidor - hora local (ms)
     bestRtt: 1e9,
     retry: 0,
@@ -126,7 +130,7 @@
     stopTimers();
     clearTimeout(S.retryTimer);
     S.retryTimer = 0;
-    S.code = null; S.status = 'off'; S.v = -1; S.state = null; S.members = []; S.retry = 0;
+    S.code = null; S.status = 'off'; S.v = -1; S.state = null; S.members = []; S.q = []; S.retry = 0;
     S.pending = null;
     if (had) call('left');                       // quem usa a sala (a voz) larga o que estava usando
   }
@@ -208,6 +212,7 @@
         S.v = m.v;
         S.state = m.state;
         S.members = m.members || [];
+        S.q = Array.isArray(m.q) ? m.q : [];
         S.offset = m.now - Date.now();               // primeira estimativa (o erro e o atraso de uma volta); os pings refinam
         S.bestRtt = 1e9;
         startTimers();
@@ -243,6 +248,14 @@
         S.v = m.v;
         S.state = m.state;
         if (m.state && m.state.by !== S.id) applyRemote(m.state);
+        break;
+      case 'queue':
+        S.q = Array.isArray(m.q) ? m.q : [];
+        call('queue', m.ev || null);
+        notify();
+        break;
+      case 'qerr':
+        call('toast', m.error === 'full' ? 'A fila está cheia (50 vídeos)' : 'Não foi possível mexer na fila');
         break;
       case 'sig':
         call('signal', m.from, m.data);
@@ -294,7 +307,7 @@
   }
 
   // ---- publicar o que ESTA pessoa fez ----
-  function publish(partial) {
+  function publish(partial, load) {
     if (!S.code || S.status !== 'ok') return;
     var cur = S.state || {};
     var st = {
@@ -305,14 +318,24 @@
       rate: partial.rate !== undefined ? partial.rate : (cur.rate || 1)
     };
     if (!st.vid && !st.list) return;
-    send({ t: 'set', st: st });
+    var msg = { t: 'set', st: st };
+    if (load) msg.ld = 1;                                  // carregou um video (conta como troca para a fila)
+    send(msg);
   }
 
   function publishLoad(info) {
     if (!S.code || !info) return;
     var cur = S.state;
     if (cur && cur.vid === (info.id || null) && (cur.list || null) === (info.list || null) && !info.start) return;   // o mesmo video
-    publish({ vid: info.id || null, list: info.list || null, pos: info.start || 0, playing: true });
+    publish({ vid: info.id || null, list: info.list || null, pos: info.start || 0, playing: true }, true);
+  }
+
+  // ---- fila de videos da sala ----
+  function qSend(obj) { if (S.code && S.status === 'ok') return send(obj); return false; }
+  function qNext() {
+    var lid = S.state && S.state.lid;
+    if (typeof lid !== 'number') return false;             // sala sem video carregado (ou servidor antigo)
+    return qSend({ t: 'qnext', lid: lid });
   }
 
   function onFrameEvent(d) {
@@ -351,6 +374,13 @@
     publishLoad: publishLoad,
     onFrameEvent: onFrameEvent,
     send: send,
+    queue: function () { return S.q.slice(); },
+    qAdd: function (vid, title, at) { var o = { t: 'qadd', vid: vid, title: String(title || '').slice(0, 200) }; if (typeof at === 'number') o.at = at; return qSend(o); },
+    qMove: function (id, to) { return qSend({ t: 'qmove', id: id, to: to }); },
+    qRemove: function (id) { return qSend({ t: 'qremove', id: id }); },
+    qPlay: function (id) { return qSend({ t: 'qplay', id: id }); },
+    qClear: function () { return qSend({ t: 'qclear' }); },
+    qNext: qNext,
     setVoice: function (on, muted) { return send({ t: 'voice', on: !!on, muted: !!muted }); },
     __drop: function () { if (S.ws) { try { S.ws.close(4001); } catch (e) { /* ignora */ } } }     // so para testes: simula a rede caindo
   };

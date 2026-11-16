@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Testes da pesquisa do YouTube…</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; background: #111; color: #eee; padding: 1rem 1.5rem; }
+  code { background: #222; padding: .1em .4em; border-radius: 4px; }
+  .ok { color: #5ee0a0; } .bad { color: #ff6a5e; }
+  li { margin: .15rem 0; }
+</style>
+</head>
+<body>
+<h1>Pesquisa do YouTube (<code>web/yt-search.js</code> e <code>web/yt.js</code>)</h1>
+<p>Roda a leitura dos resultados sobre uma amostra <b>real</b> do YouTube (<code>tests/yt-fixture.json</code>) e o cliente da tela com um programa de mentira. Na pasta do projeto:
+<code>python -m http.server 8000</code>; depois abra <code>http://localhost:8000/tests/yt-test.html</code>.</p>
+<h2 id="resumo">rodando…</h2>
+<ul id="lista"></ul>
+<script>window.__lmYtTest = true;</script>
+<script src="../web/yt-search.js"></script>
+<script src="../web/yt.js"></script>
+<script>
+(async function () {
+  var results = [];
+  function check(name, cond, extra) { results.push({ name: name, ok: !!cond, extra: cond ? undefined : extra }); }
+  var Y = window.__lmYt;
+  var fix = await (await fetch('yt-fixture.json')).json();
+
+  // ---- leitura da primeira pagina (amostra real: tem anuncio, carrossel de Shorts e video promovido no meio) ----
+  var sections = fix.first.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents;
+  var r1 = Y._collect(sections);
+  check('1a pagina: acha os 3 videos da amostra, na ordem, ignorando anuncios e carrosseis', r1.items.length === 3 && r1.items[0].id === 'CA7ST83-cro' && r1.items[1].id === '3NycM9lYdRI' && r1.items[2].id === 'BbcIZ0RQ5Bw', r1.items.map(function (i) { return i.id; }));
+  check('1a pagina: cada video tem titulo, canal, duracao (m:ss), visualizacoes e quando foi publicado',
+    r1.items.every(function (i) { return i.title && i.channel && /^\d+(:\d\d)+$/.test(i.dur) && /\d/.test(i.views) && i.pub; }), r1.items);
+  check('1a pagina: achou o token da proxima pagina', typeof r1.token === 'string' && r1.token.length > 20, r1.token);
+  check('1a pagina: nenhum video "ao vivo" na amostra', r1.items.every(function (i) { return i.live === false; }), r1.items);
+  var r2 = Y._collect(fix.second.onResponseReceivedCommands[0].appendContinuationItemsAction.continuationItems);
+  check('pagina seguinte (continuacao): acha os 3 videos', r2.items.length === 3 && r2.items[0].id === '1bLTSokZHsU', r2.items.map(function (i) { return i.id; }));
+  check('pagina seguinte: os videos sao outros (sem repeticao com a primeira)', r2.items.every(function (i) { return !r1.items.some(function (j) { return j.id === i.id; }); }), 1);
+
+  // ---- casos montados na mao ----
+  var v = function (id, title, extra) { return { videoRenderer: Object.assign({ videoId: id, title: { runs: [{ text: title }] }, ownerText: { runs: [{ text: 'Canal' }] }, lengthText: { simpleText: '3:21' } }, extra || {}) }; };
+  var ID1 = 'aaaaaaaaaaa', ID2 = 'bbbbbbbbbbb';
+  var c = Y._collect([{ itemSectionRenderer: { contents: [v(ID1, 'Um'), v(ID1, 'Um de novo'), v('curto', 'Invalido'), v(ID2, '')] } }]);
+  check('repetido (mesmo id) entra uma vez; id invalido e video sem titulo sao ignorados', c.items.length === 1 && c.items[0].id === ID1 && c.items[0].title === 'Um', c.items);
+  var live = Y._fromVideo(v(ID1, 'Transmissao', { lengthText: undefined, thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: 'LIVE', text: { simpleText: 'AO VIVO' } } }] }).videoRenderer);
+  check('transmissao ao vivo: marcada como live e sem duracao', live.live === true && live.dur === '', live);
+  var lb = Y._fromVideo(v(ID1, 'Estreia', { lengthText: undefined, badges: [{ metadataBadgeRenderer: { style: 'BADGE_STYLE_TYPE_LIVE_NOW' } }] }).videoRenderer);
+  check('selo "ao vivo agora" tambem marca live', lb.live === true, lb);
+  var runs = Y._fromVideo({ videoId: ID1, title: { runs: [{ text: 'Parte 1 ' }, { text: ' parte 2' }] }, shortBylineText: { runs: [{ text: 'Curto' }] }, shortViewCountText: { simpleText: '1,2 mi de visualizacoes' } });
+  check('titulo em varias partes e juntado; canal e visualizacoes caem para os campos curtos', runs.title === 'Parte 1 parte 2' && runs.channel === 'Curto' && /1,2 mi/.test(runs.views), runs);
+  var lock = Y._fromLockup({ contentType: 'LOCKUP_CONTENT_TYPE_VIDEO', contentId: ID2,
+    metadata: { lockupMetadataViewModel: { title: { content: 'No formato novo' }, metadata: { contentMetadataViewModel: { metadataRows: [{ metadataParts: [{ text: { content: 'Canal Novo' } }] }, { metadataParts: [{ text: { content: '10 mil visualizacoes' } }, { text: { content: 'ha 2 dias' } }] }] } } } },
+    contentImage: { thumbnailViewModel: { overlays: [{ thumbnailBottomOverlayViewModel: { badges: [{ thumbnailBadgeViewModel: { text: '12:34' } }] } }] } } });
+  check('formato novo (lockupViewModel) de video: titulo, canal, numeros e duracao',
+    lock && lock.id === ID2 && lock.title === 'No formato novo' && lock.channel === 'Canal Novo' && /10 mil/.test(lock.views) && lock.pub === 'ha 2 dias' && lock.dur === '12:34', lock);
+  check('lockupViewModel de outro tipo (playlist, anuncio) e ignorado', Y._fromLockup({ contentType: 'LOCKUP_CONTENT_TYPE_PLAYLIST', contentId: ID2 }) === null && Y._fromLockup({}) === null && Y._fromLockup(null) === null, 1);
+  var t2 = Y._collect([{ continuationItemRenderer: { continuationEndpoint: { commandExecutorCommand: { commands: [{ foo: 1 }, { continuationCommand: { token: 'TOKEN-EM-LISTA' } }] } } } }]);
+  check('token da proxima pagina tambem e achado na forma de lista de comandos', t2.token === 'TOKEN-EM-LISTA', t2);
+  check('lista vazia ou lixo: sem videos e sem erro', Y._collect(null).items.length === 0 && Y._collect([null, {}, { itemSectionRenderer: {} }]).items.length === 0, 1);
+
+  // ---- pagina HTML e configuracao ----
+  var html = '<html><script>ytcfg.set({"INNERTUBE_API_KEY":"CHAVE123","INNERTUBE_CONTEXT_CLIENT_VERSION":"2.20261116.01.00","HL":"pt","GL":"BR"});<\/script><script>var ytInitialData = ' + JSON.stringify(fix.first) + ';<\/script></body></html>';
+  var data = Y._extractData(html);
+  check('le o ytInitialData de dentro da pagina', data && data.contents && data.contents.twoColumnSearchResultsRenderer, data && Object.keys(data));
+  check('pagina sem ytInitialData ou com JSON quebrado: null', Y._extractData('<html></html>') === null && Y._extractData('var ytInitialData = {quebrado;<\/script>') === null, 1);
+  var cfg = Y._readCfg(html);
+  check('le a chave, a versao do cliente e o idioma da pagina', cfg && cfg.key === 'CHAVE123' && cfg.ver === '2.20261116.01.00' && cfg.hl === 'pt' && cfg.gl === 'BR', cfg);
+  check('sem chave na pagina: null', Y._readCfg('<html></html>') === null, 1);
+
+  // ---- pedidos de rede (fetch de mentira) ----
+  var calls = [];
+  var realFetch = window.fetch;
+  window.fetch = function (url, opts) {
+    calls.push({ url: String(url), opts: opts });
+    var u = String(url);
+    function resp(body, ok, status) { return Promise.resolve({ ok: ok !== false, status: status || 200, text: function () { return Promise.resolve(body); }, json: function () { return Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body); } }); }
+    if (u.indexOf('/results?') === 0) return u.indexOf('q=erro') >= 0 || u.indexOf('erro500') >= 0 ? resp('', false, 500) : (u.indexOf('semformato') >= 0 ? resp('<html>nada</html>') : resp(html));
+    if (u.indexOf('/youtubei/v1/search') === 0) return resp(fix.second);
+    if (u.indexOf('/oembed') === 0) return u.indexOf('aaaaaaaaaaa') >= 0 ? resp({ title: '  Titulo   do   video ', author_name: 'Fulano', thumbnail_url: 'x' }) : resp('', false, 404);
+    return Promise.reject(new Error('rede'));
+  };
+  try {
+    var s = await Y._run.search('gatos engracados');
+    check('pesquisa: devolve os videos e o token', s.ok && s.items.length === 3 && typeof s.more === 'string', s);
+    var url = calls[0].url;
+    check('pesquisa: pede /results com o texto, o filtro "so videos" e o idioma', /^\/results\?search_query=gatos%20engracados&sp=EgIQAQ%253D%253D&hl=/.test(url), url);
+    check('pesquisa: usa os cookies do YouTube (credentials include)', calls[0].opts && calls[0].opts.credentials === 'include', calls[0].opts);
+    var m = await Y._run.more(s.more);
+    var body = JSON.parse(calls[1].opts.body);
+    check('proxima pagina: POST em /youtubei/v1/search com a chave, o contexto do cliente e o token',
+      m.ok && m.items.length === 3 && /key=CHAVE123/.test(calls[1].url) && calls[1].opts.method === 'POST' && body.continuation === s.more && body.context.client.clientVersion === '2.20261116.01.00' && body.context.client.clientName === 'WEB', [calls[1].url, body]);
+    var empty = await Y._run.search('   ');
+    check('texto vazio: lista vazia sem pedir nada', empty.ok && empty.items.length === 0 && calls.length === 2, empty);
+    var e1 = null; try { await Y._run.search('erro500'); } catch (e) { e1 = e.message; }
+    check('YouTube respondendo erro HTTP: falha com "http500"', e1 === 'http500', e1);
+    var e2 = null; try { await Y._run.search('semformato'); } catch (e) { e2 = e.message; }
+    check('pagina em formato desconhecido: falha com "formato"', e2 === 'formato', e2);
+    var info = await Y._run.info('aaaaaaaaaaa');
+    check('titulo de um video (oEmbed): titulo limpo e canal', info.ok && info.title === 'Titulo do video' && info.channel === 'Fulano' && /\/oembed\?format=json&url=https%3A%2F%2Fwww\.youtube\.com%2Fwatch%3Fv%3Daaaaaaaaaaa/.test(calls[calls.length - 1].url), [info, calls[calls.length - 1].url]);
+    var bad = await Y._run.info('curto');
+    check('titulo de id invalido: sem pedir nada', bad.ok === false && bad.error === 'id', bad);
+    var e3 = null; try { await Y._run.info('bbbbbbbbbbb'); } catch (e) { e3 = e.message; }
+    check('video que o oEmbed nao conhece (404): falha', e3 === 'http404', e3);
+
+    // ---- o que volta para o programa (mensagem) ----
+    var posted = [];
+    Y._api.post = function (msg) { posted.push(msg); };
+    Y.search(7, 'gatos engracados');
+    await new Promise(function (res) { setTimeout(res, 50); });
+    var m7 = /^yres:7:(.*)$/.exec(posted[0] || '');
+    check('mensagem de volta: "yres:<n>:<json>" com ok e os videos', m7 && JSON.parse(m7[1]).ok === true && JSON.parse(m7[1]).items.length === 3, posted[0]);
+    posted.length = 0;
+    Y.search(8, 'erro500');
+    await new Promise(function (res) { setTimeout(res, 50); });
+    check('erro volta como {ok:false,error:"http500"}', /^yres:8:/.test(posted[0] || '') && JSON.parse(posted[0].slice(7)).error === 'http500', posted[0]);
+    posted.length = 0;
+    window.fetch = function () { return Promise.reject(new TypeError('Failed to fetch')); };
+    Y.search(9, 'x');
+    Y.info(10, 'aaaaaaaaaaa');
+    await new Promise(function (res) { setTimeout(res, 50); });
+    var p9 = posted.filter(function (x) { return /^yres:9:/.test(x); })[0], p10 = posted.filter(function (x) { return /^yinfo:10:/.test(x); })[0];
+    check('sem rede: erro "rede" volta tanto na pesquisa quanto no titulo', p9 && JSON.parse(p9.slice(7)).error === 'rede' && p10 && JSON.parse(p10.slice(9)).error === 'rede', posted);
+  } finally { window.fetch = realFetch; }
+
+  // ---- cliente da tela (yt.js) com um programa de mentira ----
+  var Cl = window.LMYt, sent = [];
+  Cl._api.test = true;
+  Cl._api.post = function (msg) { sent.push(msg); };
+  check('cliente: disponivel quando ha ponte com o programa', Cl.available() === true, 1);
+  var pr = Cl.search('gatos: engracados');
+  var mm = /^ysearch:(\d+):gatos: engracados$/.exec(sent[0] || '');
+  check('cliente: manda "ysearch:<n>:<texto>" (o texto pode ter dois pontos)', !!mm, sent[0]);
+  check('cliente: texto muito longo e cortado em 300 letras', (function () { Cl.search('x'.repeat(500)); return /^ysearch:\d+:x{300}$/.test(sent[sent.length - 1]); })(), sent[sent.length - 1]);
+  var handled = Cl.onHost('yres:' + mm[1] + ':' + JSON.stringify({ ok: true, items: [{ id: 'aaaaaaaaaaa', title: 'T' }], more: 'tk' }));
+  var got = await pr;
+  check('cliente: a resposta com o mesmo numero resolve a promessa', handled === true && got.items.length === 1 && got.more === 'tk', got);
+  var pe = Cl.more('tk'); var ne = /^ymore:(\d+):tk$/.exec(sent[sent.length - 1]);
+  Cl.onHost('yres:' + ne[1] + ':{"ok":false,"error":"rede"}');
+  var errMsg = null; try { await pe; } catch (e) { errMsg = e.message; }
+  check('cliente: resposta com erro rejeita com o motivo', errMsg === 'rede', errMsg);
+  var pi = Cl.info('aaaaaaaaaaa'); var ni = /^yinfo:(\d+):aaaaaaaaaaa$/.exec(sent[sent.length - 1]);
+  Cl.onHost('yinfo:' + ni[1] + ':{"ok":true,"id":"aaaaaaaaaaa","title":"Meu video","channel":"Eu"}');
+  check('cliente: titulo de video resolve com o titulo', (await pi).title === 'Meu video', 1);
+  check('cliente: resposta atrasada (de pedido que ja acabou) e tratada sem erro; mensagem de outro tipo nao e nossa',
+    Cl.onHost('yres:99999:{"ok":true}') === true && Cl.onHost('cfg:pin=1') === false && Cl.onHost(null) === false && Cl.onHost('yres:abc') === false, 1);
+  var pz = Cl.search('lixo'); var nz = /^ysearch:(\d+):lixo$/.exec(sent[sent.length - 1]);
+  Cl.onHost('yres:' + nz[1] + ':isto nao e json');
+  var fmt = null; try { await pz; } catch (e) { fmt = e.message; }
+  check('cliente: resposta que nao e json rejeita com "formato"', fmt === 'formato', fmt);
+  Cl._api.test = false;
+  Cl._api.post = function () { throw new Error('sem ponte'); };
+  var sp = null; try { await Cl.search('x'); } catch (e) { sp = e.message; }
+  check('cliente: fora do programa (sem ponte) rejeita com "sem_programa"', sp === 'sem_programa', sp);
+
+  var passed = results.filter(function (q) { return q.ok; }).length, failed = results.length - passed;
+  var lista = document.getElementById('lista');
+  results.forEach(function (q) {
+    var li = document.createElement('li');
+    li.className = q.ok ? 'ok' : 'bad';
+    li.textContent = (q.ok ? 'OK  ' : 'FALHOU  ') + q.name + (q.ok ? '' : '  ->  ' + JSON.stringify(q.extra));
+    lista.appendChild(li);
+  });
+  var resumo = document.getElementById('resumo');
+  resumo.textContent = (failed ? 'FALHOU ' : 'OK ') + passed + '/' + results.length;
+  resumo.className = failed ? 'bad' : 'ok';
+  document.title = resumo.textContent;
+})().catch(function (e) { document.getElementById('resumo').textContent = 'ERRO: ' + e; document.title = 'ERRO'; });
+</script>
+</body>
+</html>

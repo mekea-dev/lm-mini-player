@@ -16,6 +16,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 
@@ -23,8 +24,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.4.1.0")]
-[assembly: AssemblyFileVersion("1.4.1.0")]
+[assembly: AssemblyVersion("1.5.0.0")]
+[assembly: AssemblyFileVersion("1.5.0.0")]
 
 namespace LMMiniPlayer
 {
@@ -464,6 +465,16 @@ namespace LMMiniPlayer
                 Muted = false,
                 AllowedHosts = new string[] { "spotify.com", "scdn.co", "spotifycdn.com", "google.com", "gstatic.com", "facebook.com", "apple.com" }
             };
+            // janela auxiliar ESCONDIDA que pede a lista de resultados ao YouTube para a tela de pesquisa do programa
+            // (nunca aparece: so roda web\yt-search.js numa pagina do youtube.com)
+            modules["ysearch"] = new BrowseModule
+            {
+                Name = "ysearch",
+                HomeUrl = "https://www.youtube.com/robots.txt",
+                Muted = true,
+                ScriptFile = "yt-search.js",
+                AllowedHosts = new string[] { "youtube.com" }
+            };
 
             controller = await env.CreateCoreWebView2ControllerAsync(Handle);
             core = controller.CoreWebView2;
@@ -562,8 +573,14 @@ namespace LMMiniPlayer
                 case "typing": typing = arg == "1"; break;
                 case "open": OpenExternal(arg); break;
                 case "mod":                                                 // abre um modulo (youtube, spotify) ou volta ao player
-                    if (arg == "player") HideModules(); else RunModule(arg, null);
+                    if (arg == "player") HideModules(); else if (arg != "ysearch") RunModule(arg, null);
                     break;
+                case "modhide": HideModulesQuiet(); break;                  // esconde as janelas dos sites sem sair do modo navegacao
+                case "yhome": RunModule("youtube", modules["youtube"].HomeUrl); break;      // pagina inicial do YouTube (o site)
+                case "yprep": { Task<BrowseModule> warm = YtHelper(); } break;  // aquece a janela auxiliar (ex.: ao abrir a aba Fila) para o 1o pedido nao esperar
+                case "ysearch": YtCall("search", arg); break;               // lista de resultados do programa: "<seq>:<texto>"
+                case "ymore": YtCall("more", arg); break;                   // proxima pagina: "<seq>:<token>"
+                case "yinfo": YtCall("info", arg); break;                   // titulo de um video: "<seq>:<id>"
                 case "search":                                              // pesquisa no YouTube
                     if (arg.Length > 0 && arg.Length <= 300)
                         RunModule("youtube", "https://m.youtube.com/results?search_query=" + Uri.EscapeDataString(arg));
@@ -643,7 +660,8 @@ namespace LMMiniPlayer
             Send("mod:" + m.Name);
         }
 
-        void HideModules()
+        // esconde as janelas dos sites (a pagina continua no modo navegacao: ex.: mostrando a lista de resultados do programa)
+        void HideModulesQuiet()
         {
             modSeq++;
             foreach (BrowseModule o in modules.Values)
@@ -652,6 +670,11 @@ namespace LMMiniPlayer
             }
             activeModule = null;
             FitController();
+        }
+
+        void HideModules()
+        {
+            HideModulesQuiet();
             if (controller != null) { try { controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); } catch { } }
             Send("mod:player");
         }
@@ -745,13 +768,80 @@ namespace LMMiniPlayer
             return false;
         }
 
-        // a busca do YouTube manda "lmmp-play:<link>" quando o usuario clica num video (script yt-browse.js)
+        // a busca do YouTube manda "lmmp-play:<link>" quando o usuario clica num video (script yt-browse.js);
+        // a janela auxiliar manda "yres:<n>:<json>" (resultados) e "yinfo:<n>:<json>" (titulo de um video), que seguem para a tela
         void OnModuleMessage(BrowseModule m, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            if (m.Name != "youtube" || !HostAllowed(m, e.Source ?? "")) return;
+            if ((m.Name != "youtube" && m.Name != "ysearch") || !HostAllowed(m, e.Source ?? "")) return;
             string msg;
             try { msg = e.TryGetWebMessageAsString(); } catch { return; }
-            if (msg != null && msg.StartsWith("lmmp-play:", StringComparison.Ordinal)) PlayFromModule(msg.Substring(10));
+            if (msg == null) return;
+            if (m.Name == "ysearch")
+            {
+                if ((msg.StartsWith("yres:", StringComparison.Ordinal) || msg.StartsWith("yinfo:", StringComparison.Ordinal)) && msg.Length <= 4000000) Send(msg);
+                return;
+            }
+            if (msg.StartsWith("lmmp-play:", StringComparison.Ordinal)) PlayFromModule(msg.Substring(10));
+        }
+
+        // ---------- pesquisa do programa: a janela auxiliar escondida le os resultados do YouTube ----------
+
+        Task<BrowseModule> ytHelper;
+
+        // cria a janela auxiliar (uma vez) e espera a pagina do youtube.com carregar; null = sem rede (tenta de novo no proximo pedido)
+        Task<BrowseModule> YtHelper()
+        {
+            if (ytHelper == null || (ytHelper.IsCompleted && (ytHelper.IsFaulted || ytHelper.IsCanceled || ytHelper.Result == null)))
+                ytHelper = StartYtHelper();
+            return ytHelper;
+        }
+
+        async Task<BrowseModule> StartYtHelper()
+        {
+            try
+            {
+                BrowseModule m = modules["ysearch"];
+                if (m.Controller == null)
+                {
+                    if (m.CreateTask == null) m.CreateTask = CreateModule(m);
+                    await m.CreateTask;
+                }
+                TaskCompletionSource<bool> done = new TaskCompletionSource<bool>();
+                EventHandler<CoreWebView2NavigationCompletedEventArgs> h = null;
+                h = delegate(object s, CoreWebView2NavigationCompletedEventArgs e) { m.Core.NavigationCompleted -= h; done.TrySetResult(e.IsSuccess); };
+                m.Core.NavigationCompleted += h;
+                m.Core.Navigate(m.HomeUrl);
+                Task first = await Task.WhenAny(done.Task, Task.Delay(15000));
+                if (first != done.Task || !done.Task.Result) { try { m.Core.NavigationCompleted -= h; } catch { } return null; }
+                return m;
+            }
+            catch (Exception ex) { AppLog.Error(ex); return null; }
+        }
+
+        static string JsString(string s) { return new JavaScriptSerializer().Serialize(s); }
+
+        // "search" | "more" | "info": arg = "<n>:<texto, token ou id>"; a resposta volta sozinha por OnModuleMessage
+        async void YtCall(string fn, string arg)
+        {
+            string reply = fn == "info" ? "yinfo" : "yres";
+            int i = arg == null ? -1 : arg.IndexOf(':');
+            if (i <= 0) return;
+            long seq;
+            if (!long.TryParse(arg.Substring(0, i), NumberStyles.None, CultureInfo.InvariantCulture, out seq)) return;
+            string payload = arg.Substring(i + 1);
+            if (payload.Length == 0 || payload.Length > 2000) { Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"pedido\"}"); return; }
+            try
+            {
+                BrowseModule m = await YtHelper();
+                if (m == null || m.Core == null) { Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"rede\"}"); return; }
+                string ok = await m.Core.ExecuteScriptAsync("(window.__lmYt ? (window.__lmYt." + fn + "(" + seq + "," + JsString(payload) + "), true) : false)");
+                if (ok != "true") Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"host\"}");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error(ex);
+                Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"host\"}");
+            }
         }
 
         // o link escolhido na busca toca no NOSSO player (com velocidade livre, atalhos etc.)

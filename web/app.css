@@ -367,6 +367,55 @@ body.mod-spotify .modtitle { display: block; }
 body.browse #modLoading { display: flex; }
 body.browse #toast { top: 7px; z-index: 40; }
 
+/* ---------- resultados da pesquisa do YouTube (lista do programa) ---------- */
+/* Fica por baixo da barra do modo navegacao, dentro das margens das alcas de redimensionar. */
+.results {
+  position: absolute;
+  z-index: 6;
+  left: var(--rz);
+  right: var(--rz);
+  top: var(--browse-h);
+  bottom: var(--rz);
+  display: none;
+  overflow-y: auto;
+  padding: .3rem .25rem .6rem;
+  background: #0e0e14;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .28) transparent;
+}
+body.yt-results .results { display: block; }
+body.yt-results #modLoading { display: none; }
+.res-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .2rem; }
+.res {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .6rem;
+  padding: .3rem;
+  border-radius: .6rem;
+  cursor: pointer;
+  outline: none;
+}
+.res:hover { background: rgba(255, 255, 255, .07); }
+.res:focus-visible { box-shadow: 0 0 0 2px #8fb3ff; }
+.rth { position: relative; display: block; width: 9rem; aspect-ratio: 16 / 9; border-radius: .45rem; overflow: hidden; background: #1c1c26; }
+.rth img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.rdur { position: absolute; right: .25rem; bottom: .25rem; padding: .05rem .3rem; font: 600 max(10px, .72rem)/1.3 var(--font); color: #fff; background: rgba(0, 0, 0, .82); border-radius: .25rem; }
+.rdur.live { background: #d4202e; }
+.rtx { min-width: 0; display: grid; gap: .12rem; align-content: center; }
+.rtt { font-size: max(12px, .95rem); line-height: 1.25; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rch, .rmeta { font-size: max(11px, .8rem); line-height: 1.25; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res .rq { width: 2rem; height: 2rem; color: #cfcfdb; border: 1px solid var(--line-hi); border-radius: 50%; }
+.res .rq .i { width: 1.05rem; height: 1.05rem; }
+.res .rq:hover { background: rgba(255, 74, 67, .22); border-color: rgba(255, 106, 94, .6); color: #fff; }
+.res.queued .rq { color: #5ee0a0; border-color: rgba(94, 224, 160, .7); background: rgba(94, 224, 160, .14); }
+.res-msg { margin: 0; padding: .8rem; min-height: 1.4em; text-align: center; font-size: max(12px, .9rem); color: var(--muted); }
+.res-actions { display: flex; gap: .4rem; justify-content: center; flex-wrap: wrap; padding: 0 .5rem .8rem; }
+.res-site { display: block; margin: .2rem auto .6rem; padding: .3rem .6rem; font: inherit; font-size: max(11px, .8rem); color: var(--muted); background: none; border: 0; text-decoration: underline; cursor: pointer; }
+.res-site:hover { color: #fff; }
+@media (max-width: 330px) { .rth { width: 6.2rem; } .rmeta { display: none; } }
+@media (max-height: 200px) { .rmeta { display: none; } }
+
 /* ---------- sala (ver o mesmo video junto com outras pessoas) ---------- */
 .ib.room-on { color: #5ee0a0; }
 .roompanel {
@@ -497,6 +546,79 @@ body.browse .roompanel { display: none; }
   .rp-card .field { margin-top: .35rem; }
   .rp-msg { margin-top: .35rem; font-size: .78rem; }
 }
+
+/* abas do painel da sala (Sala | Fila) e a fila de videos */
+.rp-tabs { display: flex; gap: .3rem; justify-content: center; margin: 0 0 .6rem; }
+.rp-tab { height: 2rem; padding: 0 .9rem; font: 600 max(12px, .88rem) var(--font); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+.rp-tab:hover { color: #fff; background: rgba(255, 255, 255, .07); }
+.rp-tab.on { color: #fff; background: rgba(255, 74, 67, .16); border-color: rgba(255, 106, 94, .5); }
+.rp-tab:focus-visible { outline: 2px solid #8fb3ff; outline-offset: 2px; }
+.rp-badge { display: inline-block; min-width: 1.3rem; margin-left: .2rem; padding: 0 .35rem; font-size: .72rem; line-height: 1.3rem; text-align: center; color: #fff; background: var(--accent); border-radius: 999px; }
+.roompanel.q-on .rp-card h2 { display: none; }
+.rp-qadd { display: flex; gap: .4rem; margin: 0 0 .5rem; }
+.rp-qadd input {
+  flex: 1;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 .7rem;
+  font: inherit;
+  font-size: max(12px, .88rem);
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.rp-qadd input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 74, 67, .22); }
+.rp-qadd .btn { flex: none; display: inline-flex; align-items: center; gap: .3rem; }
+.rp-qadd .btn .i { width: .95rem; height: .95rem; }
+.rp-queue {
+  position: relative;
+  list-style: none;
+  margin: 0 0 .5rem;
+  padding: 0;
+  display: grid;
+  gap: .3rem;
+  max-height: max(9.5rem, calc(100vh - 15rem));
+  overflow-y: auto;
+  text-align: left;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .28) transparent;
+}
+.rp-queue:empty { display: none; }
+.qi {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .4rem;
+  height: max(3.4rem, 46px);                 /* altura igual em todas as linhas (o arraste conta com isso); cabe titulo de 2 linhas + "por Fulano" */
+  padding: .25rem .35rem .25rem .15rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .7rem;
+}
+.qgrip { width: 1.4rem; height: 2.2rem; padding: 0; display: grid; place-items: center; color: #7d7d90; background: transparent; border: 0; border-radius: .4rem; cursor: grab; touch-action: none; }
+.qgrip:hover { color: #fff; background: rgba(255, 255, 255, .08); }
+.qgrip:focus-visible { outline: 2px solid #8fb3ff; }
+.qgrip .i { width: 1rem; height: 1rem; }
+.qth { width: 3.7rem; height: 2.08rem; object-fit: cover; border-radius: .3rem; background: #1c1c26; }
+.qtx { min-width: 0; display: grid; align-content: center; }
+.qtt { font-size: max(11px, .82rem); line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.qby { font-size: max(10px, .7rem); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qplay, .qrm { width: 1.8rem; height: 1.8rem; }
+.qplay .i, .qrm .i { width: .95rem; height: .95rem; }
+.qplay:hover { color: #5ee0a0; }
+.qi.dragging { position: relative; z-index: 3; cursor: grabbing; background: var(--panel-hi); border-color: var(--accent); box-shadow: 0 8px 22px rgba(0, 0, 0, .55); transition: none; }
+.rp-queue.sorting { cursor: grabbing; -webkit-user-select: none; user-select: none; }
+.rp-queue.sorting .qgrip { cursor: grabbing; }
+.rp-queue.sorting .qi:not(.dragging) { transition: transform .12s ease; }
+.rp-qhint { margin: .1rem 0 .5rem; font-size: max(10px, .74rem); color: var(--muted); }
+.rp-qhint .i { display: inline-block; width: .8rem; height: .8rem; vertical-align: -.12em; }
+@media (max-width: 360px) { .qby { display: none; } }
+@media (max-width: 300px) { .qth { display: none; } .qi { grid-template-columns: auto minmax(0, 1fr) auto auto; } }
+@media (max-height: 260px) { .rp-qhint { display: none; } }
 
 /* ---------- aviso de versao nova (atualizacao automatica) ---------- */
 /* Fica logo abaixo da barra de cima e aparece junto com ela (quando o mouse mexe sobre a janela). */
