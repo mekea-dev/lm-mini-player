@@ -24,8 +24,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.7.1.0")]
-[assembly: AssemblyFileVersion("1.7.1.0")]
+[assembly: AssemblyVersion("1.7.2.0")]
+[assembly: AssemblyFileVersion("1.7.2.0")]
 
 namespace LMMiniPlayer
 {
@@ -55,14 +55,23 @@ namespace LMMiniPlayer
     {
         public static void Error(Exception ex)
         {
+            Write(ex == null ? "(erro desconhecido)" : ex.ToString());
+        }
+
+        // uma linha curta (o motivo de algo ter falhado, sem excecao): vai para o mesmo erro.log
+        public static void Note(string text)
+        {
+            Write(text ?? "");
+        }
+
+        static void Write(string text)
+        {
             try
             {
                 Directory.CreateDirectory(AppPaths.DataDir);
                 string file = Path.Combine(AppPaths.DataDir, "erro.log");
                 if (File.Exists(file) && new FileInfo(file).Length > 256 * 1024) File.Delete(file);
-                File.AppendAllText(file,
-                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "  " +
-                    (ex == null ? "(erro desconhecido)" : ex.ToString()) + "\r\n\r\n");
+                File.AppendAllText(file, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "  " + text + "\r\n\r\n");
             }
             catch { /* nao ha mais o que fazer */ }
         }
@@ -761,11 +770,17 @@ namespace LMMiniPlayer
             w.WebMessageReceived += delegate(object s, CoreWebView2WebMessageReceivedEventArgs e) { OnModuleMessage(m, e); };
             w.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
             {
-                if (!HostAllowed(m, e.Uri)) { e.Cancel = true; OpenExternal(e.Uri); }
+                if (!HostAllowed(m, e.Uri))
+                {
+                    e.Cancel = true;
+                    if (m.Name == "ysearch") ytRedirect = HostOf(e.Uri);      // a janela auxiliar e escondida: nunca abre o navegador, so anota para onde tentaram leva-la
+                    else OpenExternal(e.Uri);
+                }
             };
             w.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
             {
                 e.Handled = true;
+                if (m.Name == "ysearch") return;
                 if (m.Name == "youtube" && WatchUrl.IsMatch(e.Uri)) PlayFromModule(e.Uri); else OpenExternal(e.Uri);
             };
             w.SourceChanged += delegate { OnModuleSourceChanged(m); };
@@ -819,8 +834,35 @@ namespace LMMiniPlayer
         // ---------- pesquisa do programa: a janela auxiliar escondida le os resultados do YouTube ----------
 
         Task<BrowseModule> ytHelper;
+        string ytWhy = "";                                               // por que a janela auxiliar nao ficou pronta: vai na mensagem de erro da pesquisa e no erro.log
+        string ytRedirect = "";                                          // para onde tentaram levar a janela auxiliar (outro site: consentimento, portal de rede...)
+        bool ytTestFailed1, ytTestFailed2;                               // so para testes (LMMP_TEST_YT_FAIL)
+        const int YtCreateMs = 15000;                                    // esperar a janela auxiliar ser criada
+        const int YtNavMs = 15000;                                       // esperar a pagina do youtube.com abrir
 
-        // cria a janela auxiliar (uma vez) e espera a pagina do youtube.com carregar; null = sem rede (tenta de novo no proximo pedido)
+        void YtNote(string why)
+        {
+            ytWhy = why;
+            AppLog.Note("pesquisa do YouTube: " + why);
+        }
+
+        static string HostOf(string uri)
+        {
+            Uri u;
+            return Uri.TryCreate(uri, UriKind.Absolute, out u) ? u.Host : "?";
+        }
+
+        // resposta de erro para a pagina: {"ok":false,"error":"rede","info":"motivo"}
+        static string YtErr(string code, string info)
+        {
+            Dictionary<string, object> d = new Dictionary<string, object>();
+            d["ok"] = false;
+            d["error"] = code;
+            if (!string.IsNullOrEmpty(info)) d["info"] = info.Length > 200 ? info.Substring(0, 200) : info;
+            return new JavaScriptSerializer().Serialize(d);
+        }
+
+        // cria a janela auxiliar (uma vez) e espera a pagina do youtube.com carregar; null = nao deu (o motivo fica em ytWhy; tenta de novo no proximo pedido)
         Task<BrowseModule> YtHelper()
         {
             if (ytHelper == null || (ytHelper.IsCompleted && (ytHelper.IsFaulted || ytHelper.IsCanceled || ytHelper.Result == null)))
@@ -830,24 +872,54 @@ namespace LMMiniPlayer
 
         async Task<BrowseModule> StartYtHelper()
         {
+            BrowseModule m = modules["ysearch"];
             try
             {
-                BrowseModule m = modules["ysearch"];
+                string fail = testMode ? Environment.GetEnvironmentVariable("LMMP_TEST_YT_FAIL") : null;       // so para testes: create | nav | nav2
+                // 1) a janela em si (uma vez). Se a criacao quebrou antes, cria de novo: antes a tarefa quebrada ficava para sempre e a pesquisa nao voltava mais
                 if (m.Controller == null)
                 {
+                    if (m.CreateTask != null && (m.CreateTask.IsFaulted || m.CreateTask.IsCanceled)) m.CreateTask = null;
+                    if (fail == "create" && !ytTestFailed1) { ytTestFailed1 = true; throw new InvalidOperationException("falha de teste ao criar a janela auxiliar"); }
                     if (m.CreateTask == null) m.CreateTask = CreateModule(m);
-                    await m.CreateTask;
+                    Task made = m.CreateTask;
+                    Task slow = await Task.WhenAny(made, Task.Delay(YtCreateMs));
+                    if (slow != made) { YtNote("criar: a janela auxiliar demorou mais de " + (YtCreateMs / 1000) + " s (ela continua tentando; a proxima pesquisa espera por ela)"); return null; }
+                    await made;
                 }
-                TaskCompletionSource<bool> done = new TaskCompletionSource<bool>();
-                EventHandler<CoreWebView2NavigationCompletedEventArgs> h = null;
-                h = delegate(object s, CoreWebView2NavigationCompletedEventArgs e) { m.Core.NavigationCompleted -= h; done.TrySetResult(e.IsSuccess); };
-                m.Core.NavigationCompleted += h;
-                m.Core.Navigate(m.HomeUrl);
-                Task first = await Task.WhenAny(done.Task, Task.Delay(15000));
-                if (first != done.Task || !done.Task.Result) { try { m.Core.NavigationCompleted -= h; } catch { } return null; }
-                return m;
+                // 2) a pagina do youtube.com com o script de pesquisa: se ela falhar de cara, mais uma tentativa
+                for (int attempt = 1; attempt <= 2; attempt++)
+                {
+                    ytRedirect = "";
+                    TaskCompletionSource<string> done = new TaskCompletionSource<string>();
+                    EventHandler<CoreWebView2NavigationCompletedEventArgs> h = null;
+                    h = delegate(object s, CoreWebView2NavigationCompletedEventArgs e) { m.Core.NavigationCompleted -= h; done.TrySetResult(e.IsSuccess ? "" : e.WebErrorStatus.ToString()); };
+                    m.Core.NavigationCompleted += h;
+                    m.Core.Navigate(m.HomeUrl);
+                    Task late = await Task.WhenAny(done.Task, Task.Delay(YtNavMs));
+                    if (late != done.Task)
+                    {
+                        try { m.Core.NavigationCompleted -= h; } catch { }
+                        YtNote("abrir a pagina do youtube.com: demorou mais de " + (YtNavMs / 1000) + " s");
+                        return null;
+                    }
+                    string why = done.Task.Result;
+                    if (why == "" && ((fail == "nav" && attempt == 1 && !ytTestFailed1) || (fail == "nav2" && !ytTestFailed2))) why = "TesteDeFalha";
+                    if (why == "") return m;
+                    YtNote("abrir a pagina do youtube.com (tentativa " + attempt + " de 2): " + why + (ytRedirect.Length > 0 ? " [foi levada para " + ytRedirect + "]" : ""));
+                    if (attempt == 2) { if (fail == "nav2") ytTestFailed2 = true; return null; }
+                    if (fail == "nav") ytTestFailed1 = true;
+                    await Task.Delay(800);
+                }
+                return null;
             }
-            catch (Exception ex) { AppLog.Error(ex); return null; }
+            catch (Exception ex)
+            {
+                YtNote("criar a janela auxiliar: " + ex.GetType().Name + ": " + ex.Message);
+                AppLog.Error(ex);
+                if (m.Controller == null) m.CreateTask = null;           // a proxima pesquisa tenta criar de novo
+                return null;
+            }
         }
 
         static string JsString(string s) { return new JavaScriptSerializer().Serialize(s); }
@@ -865,14 +937,14 @@ namespace LMMiniPlayer
             try
             {
                 BrowseModule m = await YtHelper();
-                if (m == null || m.Core == null) { Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"rede\"}"); return; }
+                if (m == null || m.Core == null) { Send(reply + ":" + seq + ":" + YtErr("rede", ytWhy)); return; }
                 string ok = await m.Core.ExecuteScriptAsync("(window.__lmYt ? (window.__lmYt." + fn + "(" + seq + "," + JsString(payload) + "), true) : false)");
-                if (ok != "true") Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"host\"}");
+                if (ok != "true") Send(reply + ":" + seq + ":" + YtErr("host", "a pagina auxiliar nao tem o script de pesquisa (" + HostOf(m.Core.Source ?? "") + ")"));
             }
             catch (Exception ex)
             {
                 AppLog.Error(ex);
-                Send(reply + ":" + seq + ":{\"ok\":false,\"error\":\"host\"}");
+                Send(reply + ":" + seq + ":" + YtErr("host", ex.GetType().Name + ": " + ex.Message));
             }
         }
 

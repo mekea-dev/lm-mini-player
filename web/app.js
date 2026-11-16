@@ -58,6 +58,7 @@
     ytBusy: false,
     ytErr: '',
     ytGen: 0,           // descarta resposta de pesquisa antiga
+    ytAuto: 0,          // quantas vezes a pesquisa tentou de novo sozinha depois de uma falha de rede
     rpTab: 'room',      // aba do painel da sala: 'room' | 'queue'
     qDrag: null,        // arraste da fila em andamento
     qIdle: true,        // nada tocando (ou o ultimo video acabou sem proximo): o que entrar na SUA fila comeca a tocar
@@ -1204,6 +1205,7 @@
     S.ytMore = null;
     S.ytErr = '';
     S.ytBusy = false;
+    S.ytAuto = 0;
     S.ytGen++;
     var ul = $('resList');
     while (ul.firstChild) ul.removeChild(ul.firstChild);
@@ -1214,7 +1216,7 @@
 
   function ytErrorText(err) {
     var m = err && err.message;
-    if (m === 'tempo' || m === 'rede') return 'Sem resposta do YouTube. Confira a internet e tente de novo.';
+    if (m === 'tempo' || m === 'rede') return 'Sem resposta do YouTube. Confira a internet e tente de novo.' + (err.info ? ' [' + err.info + ']' : (m === 'tempo' ? ' [o programa nao respondeu em 25 s]' : ''));
     if (m === 'formato') return 'Não consegui ler os resultados do YouTube agora (o formato da página veio diferente).' + (err.info ? ' [' + err.info + ']' : '');
     return 'Não consegui pesquisar agora.' + (m ? ' [' + m + ']' : '');
   }
@@ -1236,6 +1238,11 @@
       setTimeout(fillResults, 0);
     }, function (err) {
       if (gen !== S.ytGen) return;
+      if (err && err.message === 'rede' && S.ytAuto < 1) {                // falha de rede (janela auxiliar ainda abrindo, rede oscilando): tenta mais uma vez sozinho
+        S.ytAuto++;
+        setTimeout(function () { if (gen === S.ytGen) { S.ytBusy = false; loadResults(more); } }, 1200);
+        return;                                                           // (a tela continua em "Pesquisando...")
+      }
       S.ytBusy = false;
       S.ytErr = ytErrorText(err);
       renderResults();
@@ -1608,7 +1615,17 @@
     // colou um link: toca na hora; colou outro texto: espera o Enter para pesquisar
     setTimeout(function () { var v = $('url').value; if (v.trim() && window.LMLink.parse(v)) submitOmni(v); }, 0);
   });
+  var ytWarmed = false;
+  function warmYt(v) {                                                    // a janela auxiliar da pesquisa abre enquanto a pessoa digita: o 1o Enter nao espera por ela
+    if (ytWarmed || !ytAvailable()) return;
+    v = (v || '').trim();
+    if (v.length < 2 || window.LMLink.parse(v)) return;
+    ytWarmed = true;
+    toHost('yprep');
+  }
+  $('searchInput').addEventListener('input', function () { warmYt($('searchInput').value); });
   $('url').addEventListener('input', function () {
+    warmYt($('url').value);
     var v = $('url').value.trim();
     $('goText').textContent = (!v || window.LMLink.parse(v)) ? 'Reproduzir' : 'Buscar';
   });
@@ -1653,7 +1670,7 @@
     var r = $('results');
     if (S.ytMore && !S.ytBusy && r.scrollTop + r.clientHeight >= r.scrollHeight - 160) loadResults(true);
   });
-  $('resRetry').addEventListener('click', function () { loadResults(S.ytItems.length > 0); });
+  $('resRetry').addEventListener('click', function () { S.ytAuto = 0; loadResults(S.ytItems.length > 0); });
   function openYtSite() { S.ytView = 'site'; setMode('youtube'); toHost('search:' + S.ytq); }
   $('resSite').addEventListener('click', openYtSite);
   $('resSite2').addEventListener('click', openYtSite);

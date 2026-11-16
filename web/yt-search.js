@@ -262,6 +262,7 @@
     var m = (e && e.message) || 'erro';
     var out = { ok: false, error: /^http|formato|sem_config/.test(m) ? m : 'rede' };
     if (e && e.info) out.info = String(e.info).slice(0, 200);
+    else if (out.error === 'rede') out.info = (String((e && e.name) || 'erro') + ': ' + m + ' | ' + location.host + ' | ' + (navigator.onLine ? 'online' : 'sem rede')).slice(0, 200);   // o motivo vai na mensagem
     return out;
   }
 

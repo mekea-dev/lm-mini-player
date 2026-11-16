@@ -170,6 +170,7 @@ Dentro da sala, o botão de **microfone** (na barra de cima e no painel da sala)
 - **Mensagem pedindo o WebView2:** instale o *WebView2 Runtime* em <https://developer.microsoft.com/microsoft-edge/webview2/> e abra de novo.
 - **O vídeo mostra um aviso de erro:** use *Abrir no YouTube*; o vídeo provavelmente não permite reprodução incorporada.
 - **Algo deu errado:** o detalhe técnico fica em `%LOCALAPPDATA%\LMMiniPlayer\erro.log`.
+- **A pesquisa mostra "Sem resposta do YouTube":** o programa não conseguiu falar com o YouTube agora. Ele já tenta de novo sozinho; se a mensagem ficar, clique em **Tentar de novo** ou em **Ver no site do YouTube** (abre o site de verdade aqui dentro). O motivo vem entre colchetes na própria mensagem e também fica no `erro.log`: mande um print dela para quem mantém o programa.
 
 ## Como funciona
 

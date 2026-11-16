@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## v1.7.2 - 2026-11-16
+
+- **A pesquisa do YouTube se recupera sozinha e diz o que deu errado.** Em alguns computadores a pesquisa mostrava "Sem resposta do YouTube. Confira a internet e tente de novo." e não dava para saber por quê. Agora: (1) a janela escondida que faz a pesquisa abre enquanto você **digita** (não só no Enter), então a primeira pesquisa não espera por ela; (2) se essa janela falhar ao abrir, o programa tenta de novo na hora, e, se ela chegou a quebrar, ela é criada de novo (antes ficava quebrada até você fechar o programa); (3) se a rede oscilar, a pesquisa tenta mais uma vez sozinha antes de mostrar erro; (4) quando o erro aparece, a mensagem traz o **motivo entre colchetes** (por exemplo, para onde o YouTube tentou levar a página) e o `erro.log` guarda os detalhes, para dar para consertar de verdade. Essa janela escondida também nunca abre o navegador por conta própria.
+
 ## v1.7.1 - 2026-11-16
 
 - **A atualização automática não falha mais por acaso.** Uns 5 segundos depois de abrir, o programa limpa a pasta de espera das atualizações. Quando isso caía no meio do download da versão nova, a limpeza apagava o arquivo baixado (ou a pasta de trabalho) e a atualização falhava sem aviso, até a próxima vez que o programa abrisse (ou por mais 6 horas). Agora a limpeza e a atualização trabalham uma de cada vez, e a limpeza só apaga o que ninguém mexe há mais de 10 minutos (para não atrapalhar outra janela do programa aberta). Se o arquivo baixado sumir ou ficar preso mesmo assim (um antivírus, por exemplo), o programa tenta de novo 20 segundos depois. Provei com a limpeza rodando sem parar durante a atualização: a 1.7.0 falhou em todas as tentativas e esta versão baixa, avisa e instala todas as vezes.
