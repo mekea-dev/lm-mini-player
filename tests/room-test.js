@@ -309,7 +309,7 @@ check('fila: o hello traz a fila (vazia no comeco) e o estado nasce sem lid', Ar
 await say(qr.room, qa.ws, { t: 'qadd', vid: V1, title: 'Primeiro' });
 let qs1 = qb.ws.last('state'), qq1 = qb.ws.last('queue');
 check('fila: sala sem nenhum video: o que entra na fila comeca a tocar na hora (a fila continua vazia)',
-  qs1 && qs1.state.vid === V1 && qs1.state.playing === true && qs1.state.pos === 0 && qs1.state.lid === 1 && qs1.state.by === A && qq1 && qq1.q.length === 0 && qq1.ev.k === 'play' && qq1.ev.n === 'Ana', [qs1, qq1]);
+  qs1 && qs1.state.vid === V1 && qs1.state.playing === true && qs1.state.pos === 0 && qs1.state.lid === 1 && qs1.state.by === 'queue' && qq1 && qq1.q.length === 0 && qq1.ev.k === 'play' && qq1.ev.n === 'Ana', [qs1, qq1]);
 await say(qr.room, qb.ws, { t: 'qadd', vid: V2, title: 'Segundo' });
 let qm = qa.ws.last('queue');
 check('fila: com algo tocando, adiciona no fim e todos recebem (item com id, video, titulo e quem adicionou)',
@@ -338,7 +338,7 @@ check('lid: mexer no mesmo video (velocidade, pausa) nao muda o lid', lidBefore 
 await say(qr.room, qa.ws, { t: 'qplay', id: qa.ws.last('queue').q[1].id });
 const sp = qb.ws.last('state');
 check('fila: tocar agora poe o video do item (V3) do comeco, tocando, na velocidade da sala, tira da fila e o lid sobe',
-  sp.state.vid === V3 && sp.state.pos === 0 && sp.state.playing === true && sp.state.rate === 1.5 && sp.state.lid === lidBefore + 1 && sp.state.by === A && vids(qb.ws.last('queue')) === V4 && qb.ws.last('queue').ev.k === 'play', [sp, qb.ws.last('queue')]);
+  sp.state.vid === V3 && sp.state.pos === 0 && sp.state.playing === true && sp.state.rate === 1.5 && sp.state.lid === lidBefore + 1 && sp.state.by === 'queue' && vids(qb.ws.last('queue')) === V4 && qb.ws.last('queue').ev.k === 'play', [sp, qb.ws.last('queue')]);
 const lidNow = sp.state.lid;
 const nSt = qb.ws.all('state').length;
 await say(qr.room, qa.ws, { t: 'qnext', lid: lidNow });

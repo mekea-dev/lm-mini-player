@@ -198,10 +198,11 @@ export class Room extends DurableObject {
   // ev diz o que aconteceu (para os outros mostrarem "Ana adicionou ...")
   broadcastQueue(ev) { this.broadcast({ t: 'queue', q: this.queueOut(), ev: ev || null }); }
 
-  // poe um video para tocar: do comeco, tocando, na mesma velocidade da sala
-  async playVid(vid, by) {
+  // Poe um video para tocar: do comeco, tocando, na mesma velocidade da sala. O estado leva by = "queue" (e nao a
+  // pessoa que pediu) para TODOS aplicarem, inclusive quem pediu: so o que a pessoa fez no proprio player ela ja viu.
+  async playVid(vid) {
     const prev = this.data.state;
-    await this.applySet({ vid: vid, list: null, pos: 0, playing: true, rate: prev && prev.rate ? prev.rate : 1 }, by, true);
+    await this.applySet({ vid: vid, list: null, pos: 0, playing: true, rate: prev && prev.rate ? prev.rate : 1 }, 'queue', true);
   }
 
   indexOfItem(id) {
@@ -220,7 +221,7 @@ export class Room extends DurableObject {
     this.data.updated = Date.now();
     if (!this.data.state || this.data.idleLid === this.data.lid) {   // nada tocando (ou o video acabou sem proximo): o que entra comeca a tocar
       const first = q.shift();
-      await this.playVid(first.vid, me.id);
+      await this.playVid(first.vid);
       this.broadcastQueue({ k: 'play', n: me.name, by: me.id, title: first.title });
       return;
     }
@@ -261,7 +262,7 @@ export class Room extends DurableObject {
     const i = this.indexOfItem(m.id);
     if (i < 0) return;
     const it = this.data.q.splice(i, 1)[0];
-    await this.playVid(it.vid, me.id);
+    await this.playVid(it.vid);
     this.broadcastQueue({ k: 'play', n: me.name, by: me.id, title: it.title });
   }
 
@@ -270,7 +271,7 @@ export class Room extends DurableObject {
     if (Number(m.lid) !== this.data.lid) return;
     const it = this.data.q.shift();
     if (!it) { this.data.idleLid = this.data.lid; await this.save(); return; }     // acabou e nao ha proximo: a sala fica parada
-    await this.playVid(it.vid, me.id);
+    await this.playVid(it.vid);
     this.broadcastQueue({ k: 'next', title: it.title });
   }
 
