@@ -386,6 +386,18 @@ namespace LMMiniPlayer
                 if (xy.Length == 2 && int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out x) && int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out y))
                     testCursor = new Point(x, y);
             }
+            else if (arg.StartsWith("cleanup:", StringComparison.Ordinal))         // estresse do atualizador: roda a limpeza sem parar por N ms (a corrida que apagava o download)
+            {
+                int ms;
+                if (int.TryParse(arg.Substring(8), NumberStyles.Integer, CultureInfo.InvariantCulture, out ms))
+                {
+                    int until = Environment.TickCount + Math.Max(0, Math.Min(60000, ms));
+                    System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        while (unchecked(until - Environment.TickCount) > 0) { Updater.Cleanup(); System.Threading.Thread.Sleep(1); }
+                    });
+                }
+            }
             else if (arg == "show")                                              // sai do minimizado SEM ativar (SW_SHOWNOACTIVATE): nao tira o foco de ninguem
             {
                 Native.ShowWindow(Handle, 4);
@@ -400,7 +412,8 @@ namespace LMMiniPlayer
                     { "overlay", overlay }, { "menu", menuOpen }, { "drag", sliderDrag }, { "dirty", settingsDirty }, { "previewing", Previewing(Environment.TickCount) },
                     { "handle", handle != null && handle.Visible }, { "hrender", handle != null && handle.LastRenderOk }, { "herr", handle == null ? 0 : handle.LastRenderError }, { "hx", hb.X }, { "hy", hb.Y }, { "hw", hb.Width }, { "hh", hb.Height },
                     { "x", rb.X }, { "y", rb.Y }, { "w", rb.Width }, { "h", rb.Height }, { "state", WindowState.ToString() },
-                    { "tbhr", thumb == null ? 0 : thumb.LastHr }, { "tbn", thumb == null ? 0 : thumb.Updates }
+                    { "tbhr", thumb == null ? 0 : thumb.LastHr }, { "tbn", thumb == null ? 0 : thumb.Updates },
+                    { "updBusy", updateBusy }, { "updReady", updateReady }, { "updVer", updateVersion == null ? "" : updateVersion.ToString(3) }
                 }));
             }
             else if (arg.StartsWith("handleicon:", StringComparison.Ordinal))      // grava o desenho da alca em png (para olhar como ficou)

@@ -24,8 +24,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.7.0.0")]
-[assembly: AssemblyFileVersion("1.7.0.0")]
+[assembly: AssemblyVersion("1.7.1.0")]
+[assembly: AssemblyFileVersion("1.7.1.0")]
 
 namespace LMMiniPlayer
 {
@@ -1108,7 +1108,14 @@ namespace LMMiniPlayer
                     return;
                 }
 
-                staged = await Task.Run(() => Updater.Stage(info));
+                bool again = false;
+                try { staged = await Task.Run(() => Updater.Stage(info)); }
+                catch (IOException) { again = true; }               // arquivo preso ou sumido no meio (antivirus, outra janela do programa...): mais uma tentativa
+                if (again)
+                {
+                    await Task.Delay(20000);                        // (C# 5 nao deixa esperar dentro do catch)
+                    staged = await Task.Run(() => Updater.Stage(info));
+                }
                 updateVersion = staged.Version;
                 updateReady = true;
                 SendUpdateState();

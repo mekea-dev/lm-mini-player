@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## v1.7.1 - 2026-11-16
+
+- **A atualização automática não falha mais por acaso.** Uns 5 segundos depois de abrir, o programa limpa a pasta de espera das atualizações. Quando isso caía no meio do download da versão nova, a limpeza apagava o arquivo baixado (ou a pasta de trabalho) e a atualização falhava sem aviso, até a próxima vez que o programa abrisse (ou por mais 6 horas). Agora a limpeza e a atualização trabalham uma de cada vez, e a limpeza só apaga o que ninguém mexe há mais de 10 minutos (para não atrapalhar outra janela do programa aberta). Se o arquivo baixado sumir ou ficar preso mesmo assim (um antivírus, por exemplo), o programa tenta de novo 20 segundos depois. Provei com a limpeza rodando sem parar durante a atualização: a 1.7.0 falhou em todas as tentativas e esta versão baixa, avisa e instala todas as vezes.
+- Quem está na 1.7.0 ou antes ainda atualiza com o código antigo: a troca para a 1.7.1 pode falhar uma vez, raramente, e então tenta de novo na próxima vez que o programa abrir. A partir da 1.7.1 as atualizações já usam o conserto.
+
 ## v1.7.0 - 2026-11-16
 
 - **Menu suspenso (≡) na barra.** O botão **≡**, o primeiro da barra de cima, abre um menu com a **transparência**, o **volume do vídeo**, pesquisar ou colar link, sala e fila (com o número de vídeos), microfone, fone, voltar à velocidade 1× e sempre por cima. Em janelas pequenas a barra mostra só os botões que cabem (ficam sempre o ≡, a área de arrastar, minimizar e fechar) e **tudo o que sai da barra continua no menu**. O menu cabe até na janela mínima (rola se for baixa) e também existe na barra do modo navegação (pesquisa e Spotify), onde o site sai da frente enquanto ele está aberto. A barra agora se mede sozinha (`fitBar`), em vez de esconder botões em larguras fixas: nenhum botão fica cortado de 240 a 720 px, e os botões saem na ordem certa.

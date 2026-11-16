@@ -57,6 +57,13 @@ namespace LMMiniPlayer
         const int MaxEntries = 2000;
         const int HandshakeMs = 20000;
 
+        // Baixar e descompactar a versao nova (Stage) e limpar a pasta de espera (Cleanup) mexem nos MESMOS arquivos. A limpeza roda 5 s depois
+        // de o programa abrir, justo quando a verificacao esta baixando: ela apagava o .zip baixado (ou a pasta ".tmp") no meio da atualizacao e a
+        // atualizacao falhava sem aviso (na 1.7.0 e antes). Dentro de um processo uma trava deixa um de cada vez; para outra janela do programa
+        // (outro processo) a limpeza so apaga o que ninguem mexe ha mais de StaleStageMinutes.
+        static readonly object StageLock = new object();
+        const int StaleStageMinutes = 10;
+
         // este processo foi aberto por uma atualizacao (e ja avisou o processo antigo)
         public static bool JustUpdated;
 
@@ -280,7 +287,21 @@ namespace LMMiniPlayer
             catch { return null; }
         }
 
+        static bool failOnceDone;                                                       // so para testes (veja Stage)
+
         public static StagedUpdate Stage(UpdateInfo info)
+        {
+            // so para testes (servidor falso no proprio computador + LMMP_TEST_STAGE_FAIL_ONCE=1): a 1a chamada falha como se o arquivo tivesse sumido,
+            // para provar a nova tentativa
+            if (TestUrl() != null && Environment.GetEnvironmentVariable("LMMP_TEST_STAGE_FAIL_ONCE") == "1" && !failOnceDone)
+            {
+                failOnceDone = true;
+                throw new IOException("falha de teste: o arquivo sumiu");
+            }
+            lock (StageLock) { return StageLocked(info); }
+        }
+
+        static StagedUpdate StageLocked(UpdateInfo info)
         {
             if (!info.CanInstall) throw new InvalidOperationException("Sem endereco ou SHA-256 do arquivo.");
             string root = StageRoot;
@@ -693,18 +714,34 @@ namespace LMMiniPlayer
             catch { clean = false; }
             try
             {
-                if (Directory.Exists(StageRoot))
+                lock (StageLock)                                                       // nunca no meio de um download ou de uma descompactacao
                 {
-                    foreach (string dir in Directory.GetDirectories(StageRoot, "v*"))
+                    if (Directory.Exists(StageRoot))
                     {
-                        Version v = ParseVersion(Path.GetFileName(dir));
-                        if (dir.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || v == null || v <= Current) SafeDeleteDir(dir);
+                        foreach (string dir in Directory.GetDirectories(StageRoot, "v*"))
+                        {
+                            Version v = ParseVersion(Path.GetFileName(dir));
+                            bool tmp = dir.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
+                            if (tmp ? IsStale(dir) : (v == null || v <= Current)) SafeDeleteDir(dir);
+                        }
+                        foreach (string f in Directory.GetFiles(StageRoot, "*.part"))
+                            if (IsStale(f)) SafeDeleteFile(f);
                     }
-                    foreach (string f in Directory.GetFiles(StageRoot, "*.part")) SafeDeleteFile(f);
                 }
             }
             catch { }
             return clean;
+        }
+
+        // sobra de uma tentativa que falhou: ninguem mexe nesse arquivo ou pasta ha tempo (o que foi mexido agora pode ser de outra janela do programa)
+        static bool IsStale(string path)
+        {
+            try
+            {
+                DateTime t = Directory.Exists(path) ? Directory.GetLastWriteTimeUtc(path) : File.GetLastWriteTimeUtc(path);
+                return DateTime.UtcNow - t > TimeSpan.FromMinutes(StaleStageMinutes);
+            }
+            catch { return false; }
         }
 
         static void SafeDeleteFile(string path)
