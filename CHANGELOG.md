@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## v1.4.1 - 2026-11-16
+
+- **A pesquisa do YouTube e o Spotify voltam a aparecer.** Nas versões 1.2.0 a 1.4.0 a janela dos sites (resultados do YouTube, Spotify) abria por baixo da janela principal do programa, que é opaca: o que aparecia era só o fundo escuro com "Abrindo…", como se nada carregasse. Agora a janela do site sempre fica por cima, e só a barra de cima e as bordas de redimensionar continuam sendo do programa.
+
 ## v1.4.0 - 2026-11-12
 
 - **Conversa por voz nas salas.** Dentro de uma sala, o botão de **microfone** (na barra de cima e no painel da sala) liga a voz, como num Discord: todo mundo ouve todo mundo enquanto assiste junto. O áudio vai **direto entre os computadores** (WebRTC), sem passar pelo servidor. Tem **dois volumes separados**, o do vídeo e o das vozes, **volume e silenciar por pessoa** (só para você), o silenciar do seu próprio microfone, um contorno verde em quem está falando e o ícone vermelho em quem está mudo. Dá para entrar na voz só para ouvir, sem microfone. **Use fones de ouvido** para não gerar eco. Até 8 pessoas por sala. Em redes muito restritas (algumas de empresas e faculdades) a voz pode não conectar; o vídeo continua sincronizado.

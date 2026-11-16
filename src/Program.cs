@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyProduct("LM Mini Player")]
 [assembly: AssemblyDescription("Mini player de YouTube que fica por cima das outras janelas")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Leonardo Maquea")]
-[assembly: AssemblyVersion("1.4.0.0")]
-[assembly: AssemblyFileVersion("1.4.0.0")]
+[assembly: AssemblyVersion("1.4.1.0")]
+[assembly: AssemblyFileVersion("1.4.1.0")]
 
 namespace LMMiniPlayer
 {
@@ -93,6 +93,8 @@ namespace LMMiniPlayer
         [DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex);
         [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
         [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+        [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+        [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     }
 
@@ -176,6 +178,7 @@ namespace LMMiniPlayer
         public Task CreateTask;
         public CoreWebView2Controller Controller;
         public CoreWebView2 Core;
+        public IntPtr Hwnd;                     // a janela filha do formulario que hospeda este WebView2 (para trazer ao topo)
     }
 
     sealed class MainForm : Form
@@ -424,6 +427,7 @@ namespace LMMiniPlayer
                 {
                     activeModule.Controller.Bounds = ModuleBounds();
                     activeModule.Controller.IsVisible = true;
+                    RaiseModule(activeModule);
                 }
             }
             catch { }
@@ -652,9 +656,29 @@ namespace LMMiniPlayer
             Send("mod:player");
         }
 
+        // As janelas filhas do formulario (cada WebView2 tem uma), da de cima para a de baixo na ordem Z.
+        List<IntPtr> ChildWindows()
+        {
+            List<IntPtr> l = new List<IntPtr>();
+            IntPtr c = Native.GetWindow(Handle, 5);                          // GW_CHILD: a de cima
+            while (c != IntPtr.Zero) { l.Add(c); c = Native.GetWindow(c, 2); }   // GW_HWNDNEXT: a de baixo
+            return l;
+        }
+
+        // O WebView2 novo nasce ABAIXO dos que ja existem (medido no Windows 11): sem trazer o do modulo para cima,
+        // a janela principal (opaca) cobre o modulo e so aparece o fundo escuro com "Abrindo...".
+        void RaiseModule(BrowseModule m)
+        {
+            if (m == null || m.Hwnd == IntPtr.Zero) return;
+            try { Native.SetWindowPos(m.Hwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }   // HWND_TOP, sem mover, sem redimensionar, sem ativar
+            catch (Exception ex) { AppLog.Error(ex); }
+        }
+
         async Task CreateModule(BrowseModule m)
         {
+            List<IntPtr> before = ChildWindows();
             CoreWebView2Controller c = await env.CreateCoreWebView2ControllerAsync(Handle);
+            foreach (IntPtr h in ChildWindows()) { if (!before.Contains(h)) { m.Hwnd = h; break; } }
             CoreWebView2 w = c.CoreWebView2;
             c.DefaultBackgroundColor = Color.FromArgb(14, 14, 20);
             c.IsVisible = false;
